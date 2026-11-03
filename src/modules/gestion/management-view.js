@@ -16,12 +16,12 @@ const notify = message => { const node=document.querySelector('#management-messa
 let active = 'dashboard';
 
 function shell(section) {
-  const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones'};
+  const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas'};
   return `
   <section class="management-module">
     <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>Registros relacionados con la producción, los clientes y la venta de productos.</p></div><span class="local-data-tag">Datos guardados en este navegador</span></div>
     <div id="management-message" class="management-message" hidden role="status"></div>
-    ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():consignments()}
+    ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():section==='finance'?finance():consignments()}
     <section class="backup-panel"><div><strong>Respaldo de datos</strong><p>Exporta periódicamente un archivo JSON. La importación reemplaza los datos locales actuales.</p></div><div class="backup-actions"><button type="button" class="management-button secondary" id="backup-export">Exportar respaldo</button><label class="management-button secondary file-button">Importar respaldo<input type="file" id="backup-import" accept=".json,application/json" hidden></label></div></section>
   </section>`;
 }
@@ -250,11 +250,76 @@ function downloadCsv(filename,headers,rows) {
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
 }
 
-export function renderManagementView(container, section='dashboard') {
+export 
+function finance() {
+  const today=dateValue();
+  return `<div class="finance-toolbar management-card">
+    <div><h3>Período de análisis</h3><p class="management-help">Los ingresos se calculan con ventas registradas y pagos efectivamente recibidos de consignaciones.</p></div>
+    <div class="finance-filters"><label class="management-field">Desde<input type="date" id="finance-from" value="${today.slice(0,7)}-01"></label><label class="management-field">Hasta<input type="date" id="finance-to" value="${today}"></label></div>
+  </div>
+  <div id="finance-summary" class="management-stats"></div>
+  <div class="management-grid">
+    <form class="management-card" id="expense-form"><h3>Registrar egreso</h3>
+      <label class="management-field">Concepto<input name="concepto" required placeholder="Ej. electricidad del taller"></label>
+      <label class="management-field">Categoría<select name="categoria"><option>Electricidad</option><option>Materiales e insumos</option><option>Mantenimiento</option><option>Herramientas y equipos</option><option>Alquiler</option><option>Transporte</option><option>Servicios</option><option>Otros</option></select></label>
+      <div class="management-form-row"><label class="management-field">Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required></label><label class="management-field">Fecha<input name="fecha" type="date" value="${today}" required></label></div>
+      <label class="management-field">Método de pago<select name="metodoPago"><option>Efectivo</option><option>QR</option><option>Transferencia</option><option>Tarjeta</option><option>Otro</option></select></label>
+      <label class="management-field">Notas<textarea name="notas" rows="2"></textarea></label>
+      <button class="management-button" type="submit">Guardar egreso</button>
+    </form>
+    <div class="management-card"><h3>Ingresos y egresos por categoría</h3><div id="finance-breakdown"></div></div>
+  </div>
+  <div class="management-card"><h3>Movimientos del período</h3><div class="management-table-wrap" id="finance-table"></div><div class="management-actions"><button class="management-button secondary" id="finance-csv">Exportar CSV</button></div></div>`;
+}
+function financeMovements(from,to) {
+  const start=new Date(from+'T00:00:00').getTime(), end=new Date(to+'T23:59:59').getTime();
+  const inRange=value=>{const t=typeof value==='number'?value:new Date(value+'T12:00:00').getTime();return Number.isFinite(t)&&t>=start&&t<=end;};
+  const rows=[];
+  appState.sales.forEach(s=>{if(inRange(s.fecha))rows.push({id:s.id,fecha:s.fecha,tipo:'Ingreso',categoria:'Venta',concepto:'Venta · '+(s.cliente||s.jobNombre||'Sin cliente'),metodo:s.metodoPago||'—',monto:Number(s.monto||0)});});
+  appState.consignments.forEach(c=>{
+    const payments=Array.isArray(c.pagos)?c.pagos:[];
+    payments.forEach((p,i)=>{if(inRange(p.fecha))rows.push({id:c.id+'_p'+i,fecha:p.fecha,tipo:'Ingreso',categoria:'Consignación',concepto:'Pago · '+(c.tienda||'Tienda')+' · '+(c.productoNombre||''),metodo:p.metodoPago||'—',monto:Number(p.monto||0)});});
+    if(!payments.length&&Number(c.montoPagado||0)>0&&inRange(c.fecha))rows.push({id:c.id+'_legacy',fecha:c.fecha,tipo:'Ingreso',categoria:'Consignación',concepto:'Cobro histórico · '+(c.tienda||'Tienda'),metodo:'No especificado',monto:Number(c.montoPagado||0)});
+  });
+  appState.expenses.forEach(x=>{if(inRange(x.fecha))rows.push({id:x.id,fecha:x.fecha,tipo:'Egreso',categoria:x.categoria||'Otros',concepto:x.concepto,metodo:x.metodoPago||'—',monto:Number(x.monto||0)});});
+  return rows.sort((a,b)=>Number(b.fecha)-Number(a.fecha));
+}
+function attachFinance(root) {
+  const from=root.querySelector('#finance-from'),to=root.querySelector('#finance-to');
+  function refresh(){
+    if(from.value>to.value){root.querySelector('#finance-summary').innerHTML='<p class="management-help">La fecha inicial no puede ser posterior a la fecha final.</p>';return;}
+    const rows=financeMovements(from.value,to.value);
+    const income=rows.filter(x=>x.tipo==='Ingreso').reduce((n,x)=>n+x.monto,0);
+    const expense=rows.filter(x=>x.tipo==='Egreso').reduce((n,x)=>n+x.monto,0);
+    const sales=rows.filter(x=>x.categoria==='Venta').reduce((n,x)=>n+x.monto,0);
+    const cons=rows.filter(x=>x.categoria==='Consignación').reduce((n,x)=>n+x.monto,0);
+    root.querySelector('#finance-summary').innerHTML=`<article><span>INGRESOS COBRADOS</span><strong>${money(income)}</strong></article><article><span>EGRESOS</span><strong>${money(expense)}</strong></article><article><span>SALDO NETO</span><strong class="${income-expense>=0?'finance-positive':'finance-negative'}">${money(income-expense)}</strong></article><article><span>VENTAS / CONSIGNACIONES</span><strong>${money(sales)} / ${money(cons)}</strong></article>`;
+    const categories=new Map();rows.filter(x=>x.tipo==='Egreso').forEach(x=>categories.set(x.categoria,(categories.get(x.categoria)||0)+x.monto));
+    root.querySelector('#finance-breakdown').innerHTML=categories.size?[...categories].sort((a,b)=>b[1]-a[1]).map(([name,value])=>`<div class="summary-row"><b>${esc(name)}</b><span>${money(value)}</span></div>`).join(''):'<p class="management-empty">No hay egresos en este período.</p>';
+    root.querySelector('#finance-table').innerHTML=rows.length?`<table class="management-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Concepto</th><th>Método</th><th>Monto</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td>${dateText(x.fecha)}</td><td><b class="${x.tipo==='Ingreso'?'finance-positive':'finance-negative'}">${x.tipo}</b></td><td>${esc(x.categoria)}</td><td>${esc(x.concepto)}</td><td>${esc(x.metodo)}</td><td><b>${money(x.monto)}</b></td><td>${x.tipo==='Egreso'?'<button class="management-link danger" data-expense-delete="'+esc(x.id)+'">Eliminar</button>':'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="management-empty">No hay movimientos en este período.</p>';
+    root.querySelector('#finance-csv').onclick=()=>downloadCsv('finanzas.csv',['Fecha','Tipo','Categoría','Concepto','Método','Monto'],rows.map(x=>[dateText(x.fecha),x.tipo,x.categoria,x.concepto,x.metodo,x.monto]));
+  }
+  from.addEventListener('change',refresh);to.addEventListener('change',refresh);
+  root.querySelector('#expense-form').addEventListener('submit',e=>{
+    e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget)),amount=Number(d.monto);
+    if(!d.concepto.trim()||!Number.isFinite(amount)||amount<=0){alert('Ingresa un concepto y monto válido.');return;}
+    appState.expenses.push({id:makeId('egreso'),concepto:d.concepto.trim(),categoria:d.categoria,monto:amount,fecha:new Date(d.fecha+'T12:00:00').getTime(),metodoPago:d.metodoPago,notas:d.notas.trim(),createdAt:Date.now()});
+    saveAppState();renderManagementView(root,'finance');notify('Egreso registrado.');
+  });
+  root.querySelector('#finance-table').addEventListener('click',e=>{
+    const del=e.target.closest('[data-expense-delete]');if(!del)return;
+    if(!confirm('¿Eliminar este egreso del registro financiero?'))return;
+    appState.expenses=appState.expenses.filter(x=>x.id!==del.dataset.expenseDelete);saveAppState();refresh();notify('Egreso eliminado.');
+  });
+  refresh();
+}
+
+function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
   if(section==='products'){renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
   if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
+  if(section==='finance')attachFinance(container);
 }
