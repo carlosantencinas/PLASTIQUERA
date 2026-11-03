@@ -1,34 +1,46 @@
 # Plastiquería
 
-Sistema de gestión para taller de impresión 3D.
+Aplicación web de gestión para un taller de impresión 3D. Proyecto nuevo e independiente del repositorio original **3DBoys**.
 
-## Objetivo
+## Módulos disponibles
 
-Modernizar la aplicación 3DBoys conservando inicialmente sus funcionalidades, la lógica de negocio y el esquema de datos existente en Firebase.
+- **Trabajos:** costos, energía, mantenimiento, mano de obra, fallas, margen, piezas vendibles, edición e historial.
+- **Inventario y compras:** filamentos, resinas, insumos y equipos; unidades normalizadas; costo promedio ponderado; ajustes y consumos asociados a trabajos.
+- **Productos:** catálogo, códigos, asignación de trabajos y existencias derivadas.
+- **Clientes:** directorio de clientes y tiendas.
+- **Ventas:** registro, validación de existencias, historial, CSV e impresión.
+- **Consignaciones:** entregas a tiendas, pagos acumulados, pagos parciales, devoluciones, saldos pendientes y saldos a favor.
+- **Panel principal:** resumen comercial y operativo.
 
-## Tecnologías
+## Persistencia y respaldo
 
-- Vite
-- JavaScript modular (ES modules)
-- Firebase Authentication
-- Cloud Firestore
-- CSS responsive
+La versión desplegada guarda datos en el almacenamiento local del navegador. Los datos no se sincronizan entre dispositivos ni usuarios. Usa **Exportar respaldo** regularmente y conserva los archivos JSON fuera del navegador.
 
-## Estado del proyecto
+La importación de un respaldo reemplaza los datos locales actuales. Antes de importar, exporta una copia del estado vigente.
 
-Etapa inicial: estructura base y validación de conexión. La aplicación no debe escribir en Firestore hasta revisar las reglas de seguridad y contar con un respaldo de los datos actuales.
+## Firebase
 
-## Desarrollo local
+El cliente de Firebase está preparado, pero la lectura y escritura en Firestore todavía están deshabilitadas. La migración debe conservar el documento compartido `talleres3dboys/principal`, revisar las reglas de seguridad y establecer control de concurrencia antes de activar sincronización. No se debe modificar ni borrar la base original durante la migración.
 
-1. Instalar Node.js LTS.
-2. Ejecutar `npm install`.
-3. Crear `.env.local` a partir de `.env.example` y completar la configuración web del proyecto Firebase.
-4. Ejecutar `npm run dev`.
+Configura las variables `VITE_FIREBASE_*` en un archivo local `.env.local` para desarrollo. No incluyas credenciales privadas ni cuentas de servicio en el frontend.
 
-## Configuración Firebase
+## Aplicación instalable
 
-Las variables `VITE_FIREBASE_*` son configuración pública de cliente. No incluir claves privadas, credenciales de cuentas de servicio ni secretos administrativos.
+Plastiquería incluye un manifiesto y caché de aplicación para instalarse como PWA y abrir su interfaz básica sin conexión. La sincronización en la nube, cuando se habilite, requerirá conexión.
 
-## Principio de migración
+## Desarrollo
 
-El repositorio original `3DBoys` y los datos actuales de Firebase deben permanecer sin cambios durante esta etapa.
+Requiere Node.js 22 o superior.
+
+```bash
+npm install
+npm run dev
+npm test
+npm run build
+```
+
+## Despliegue
+
+GitHub Actions ejecuta las pruebas, compila y publica en GitHub Pages al actualizar `main`.
+
+Repositorio: https://github.com/carlosantencinas/PLASTIQUERA

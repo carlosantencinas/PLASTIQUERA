@@ -73,3 +73,12 @@ window.addEventListener('plastiqueria:saved',e=>{
   const el=document.querySelector('#save-status');if(el)el.textContent='Guardado · '+new Date(e.detail.savedAt).toLocaleTimeString('es-BO',{hour:'2-digit',minute:'2-digit'});
 });
 navigate(location.hash||'#inicio');
+
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
+      console.warn('No se pudo activar el modo instalable/offline de Plastiquería:', error);
+    });
+  });
+}
