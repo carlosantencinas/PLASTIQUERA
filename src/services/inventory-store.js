@@ -133,6 +133,7 @@ export function applyJobMaterial(jobId, jobData) {
     const movement = {
       id: makeId('consumo'),
       jobId,
+      jobNombre: String(jobData.nombre || ''),
       materialId,
       materialNombre: material.nombre,
       grams,
