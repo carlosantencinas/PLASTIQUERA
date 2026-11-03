@@ -20,6 +20,7 @@ function restoreLegacyJobMovements() {
 }
 function normalizeConsignments() {
   appState.consignments.forEach(item => {
+    if (!Array.isArray(item.pagos)) item.pagos = Number(item.montoPagado || 0) > 0 ? [{ monto: Number(item.montoPagado), fecha: item.fecha || Date.now(), metodoPago: 'Histórico' }] : [];
     if (item.cantidadDevuelta === undefined) item.cantidadDevuelta = item.estadoPago === 'Devuelto' ? item.cantidad : 0;
     if (item.estadoPago === 'Devuelto') item.estadoPago = 'Pendiente';
     if (item.montoPagado === undefined) item.montoPagado = item.estadoPago === 'Pagado' ? Number(item.valorTotal || (item.cantidad || 0) * (item.precioUnitario || 0)) : 0;
@@ -55,6 +56,7 @@ export function loadAppState() {
     appState.clients = Array.isArray(data.clients) ? data.clients : (Array.isArray(data.clientes) ? data.clientes : []);
     appState.sales = Array.isArray(data.sales) ? data.sales : [];
     appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
+    appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
     loadInventorySnapshot({
       materials: data.materials || [],
       purchases: data.purchases || [],
