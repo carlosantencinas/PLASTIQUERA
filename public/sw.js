@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plastiqueria-shell-v1';
+const CACHE_NAME = 'plastiqueria-shell-v2';
 const APP_ROOT = '/PLASTIQUERA/';
 
 self.addEventListener('install', event => {
