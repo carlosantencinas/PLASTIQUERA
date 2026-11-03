@@ -73,6 +73,23 @@ function renderPurchases() {
   </table></div>`;
 }
 
+function renderJobMovements() {
+  const movements = [...inventoryState.jobMovements].sort((a, b) => b.fecha - a.fecha);
+  if (!movements.length) {
+    return '<div class="inventory-empty"><strong>Sin consumos registrados</strong><span>Los descuentos de material asociados a trabajos aparecerán aquí.</span></div>';
+  }
+  return `<div class="inventory-table-wrap"><table class="inventory-table">
+    <thead><tr><th>Fecha</th><th>Trabajo</th><th>Material</th><th>Consumo</th><th>Costo aplicado</th></tr></thead>
+    <tbody>${movements.map(item => `<tr>
+      <td>${new Date(item.fecha).toLocaleDateString('es-BO')}</td>
+      <td><strong>${escapeText(item.jobNombre || item.jobId)}</strong></td>
+      <td>${escapeText(item.materialNombre)}</td>
+      <td>${Number(item.grams).toLocaleString('es-BO')} g</td>
+      <td>${money(item.costoTotal)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
 export function renderInventoryView(container) {
   container.innerHTML = `
     <section class="inventory-module">
@@ -126,6 +143,10 @@ export function renderInventoryView(container) {
         <div class="inventory-card-heading"><div><p class="eyebrow">MOVIMIENTOS DE COMPRA</p><h3>Historial de compras</h3></div><span id="inventoryPurchaseCount">0</span></div>
         <div id="inventoryPurchases"></div>
       </section>
+      <section class="inventory-card inventory-history">
+        <div class="inventory-card-heading"><div><p class="eyebrow">PRODUCCIÓN</p><h3>Consumo por trabajos</h3></div><span id="inventoryMovementCount">0</span></div>
+        <div id="inventoryJobMovements"></div>
+      </section>
       <p class="inventory-warning">Importante: eliminar una compra del historial no revierte el stock, igual que en 3DBoys. Ajusta el inventario por separado si necesitas corregir existencias.</p>
     </section>
   `;
@@ -134,6 +155,7 @@ export function renderInventoryView(container) {
   const materialsRoot = container.querySelector('#inventoryMaterials');
   const purchasesRoot = container.querySelector('#inventoryPurchases');
   const statsRoot = container.querySelector('#inventoryStats');
+  const movementsRoot = container.querySelector('#inventoryJobMovements');
 
   function refresh() {
     const summary = getInventorySummary();
@@ -141,11 +163,14 @@ export function renderInventoryView(container) {
       <article><span>INVERSIÓN REGISTRADA</span><strong>${money(summary.totalSpent)}</strong></article>
       <article><span>COMPRAS ESTE MES</span><strong>${money(summary.monthSpent)}</strong></article>
       <article><span>VALOR DEL INVENTARIO</span><strong>${money(summary.stockValue)}</strong></article>
-      <article><span>INVERSIÓN EN EQUIPOS</span><strong>${money(summary.equipmentSpent)}</strong></article>`;
+      <article><span>INVERSIÓN EN EQUIPOS</span><strong>${money(summary.equipmentSpent)}</strong></article>
+      <article><span>CONSUMO EN TRABAJOS</span><strong>${money(summary.jobConsumption)}</strong></article>`;
     materialsRoot.innerHTML = renderMaterials();
     purchasesRoot.innerHTML = renderPurchases();
+    movementsRoot.innerHTML = renderJobMovements();
     container.querySelector('#inventoryMaterialCount').textContent = inventoryState.materials.length + ' materiales';
     container.querySelector('#inventoryPurchaseCount').textContent = inventoryState.purchases.length + ' compras';
+    container.querySelector('#inventoryMovementCount').textContent = inventoryState.jobMovements.length + ' consumos';
     window.dispatchEvent(new Event('inventory:updated'));
 
     const names = [...new Set(inventoryState.materials.map(item => item.nombre))];
