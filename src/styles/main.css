@@ -338,3 +338,12 @@ h1,h2,h3 { color: #20283a; }
   .nav-link { border:1px solid #edf0f6; background:#fff; }
   .nav-link span { display:grid; }
 }
+
+/* Control financiero */
+.finance-toolbar{display:flex;justify-content:space-between;align-items:center;gap:18px}
+.finance-toolbar h3{margin-bottom:4px}
+.finance-filters{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:10px;min-width:min(420px,55%)}
+.finance-filters .management-field{margin:0}
+.finance-positive{color:#07865f!important}
+.finance-negative{color:#d94b5b!important}
+@media(max-width:700px){.finance-toolbar{align-items:stretch;flex-direction:column}.finance-filters{min-width:0;grid-template-columns:1fr 1fr}}
