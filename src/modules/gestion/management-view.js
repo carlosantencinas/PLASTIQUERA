@@ -1,4 +1,5 @@
 import { appState, saveAppState, exportBackup, importBackup, makeId } from '../../services/app-store.js';
+import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -6,12 +7,8 @@ const dateText = value => value ? new Date(value).toLocaleDateString('es-BO') : 
 const dateValue = value => { const d = value ? new Date(value) : new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const pieces = job => Math.max(0, Number(job?.data?.piezasVendibles ?? 1));
 const jobIdsFor = productId => appState.jobs.filter(j => j.data?.productoId === productId);
-const soldFor = productId => {
-  const ids = new Set(jobIdsFor(productId).map(j => j.id));
-  return appState.sales.filter(s => s.productoId === productId || ids.has(s.jobId)).reduce((n,s) => n + Number(s.cantidad || 1),0);
-};
-const consignedFor = productId => appState.consignments.filter(c => c.productoId === productId).reduce((n,c) => n + Math.max(0,Number(c.cantidad || 0)-Number(c.cantidadDevuelta || 0)),0);
-const availableFor = productId => Math.max(0,jobIdsFor(productId).reduce((n,j)=>n+pieces(j),0)-soldFor(productId)-consignedFor(productId));
+const stockFor = productId => getProductStock(productId, appState.jobs, appState.sales, appState.consignments);
+const availableFor = productId => stockFor(productId).available;
 const getProduct = id => appState.products.find(p => p.id === id);
 const getJob = id => appState.jobs.find(j => j.id === id);
 const notify = message => { const node=document.querySelector('#management-message'); if(node){node.textContent=message;node.hidden=false;setTimeout(()=>node.hidden=true,2600);} };
@@ -101,7 +98,7 @@ function consignments() {
       <label class="management-field">Producto<select name="productoId" id="cons-product"><option value="">Producto libre / sin código</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
       <label class="management-field">Descripción libre<input name="productoLibre" placeholder="Descripción si no hay producto"></label>
       <div class="management-form-row"><label class="management-field">Cantidad<input name="cantidad" type="number" min="1" step="1" value="1" required></label><label class="management-field">Precio por unidad (Bs)<input name="precioUnitario" type="number" min="0.01" step="0.01" required></label></div>
-      <div class="management-form-row"><label class="management-field">Fecha<input name="fecha" type="date" value="${dateValue()}"></label><label class="management-field">Estado de pago<select name="estadoPago"><option>Pendiente</option><option>Parcial</option><option>Pagado</option></select></label></div>
+      <div class="management-form-row"><label class="management-field">Fecha<input name="fecha" type="date" value="${dateValue()}"></label><label class="management-field">Monto pagado (Bs)<input name="montoPagado" type="number" min="0" step="0.01" value="0" required></label></div>
       <label class="management-field">Notas<textarea name="notas" rows="2"></textarea></label>
       <button class="management-button" type="submit">Registrar entrega</button><p class="management-help" id="cons-stock-help">Las piezas entregadas dejan de estar disponibles en taller hasta que se vendan o devuelvan.</p>
     </form>
@@ -137,14 +134,14 @@ function renderSalesTable(root) {
 function renderConsignments(root) {
   if(!appState.consignments.length){root.innerHTML='<p class="management-empty">Todavía no hay entregas registradas.</p>';return;}
   root.innerHTML=`<table class="management-table"><thead><tr><th>Fecha</th><th>Tienda</th><th>Producto</th><th>Entregado</th><th>Devuelto</th><th>A cobrar</th><th>Pagado</th><th></th></tr></thead><tbody>${[...appState.consignments].sort((a,b)=>b.fecha-a.fecha).map(c=>{
-    const net=Math.max(0,c.cantidad-(c.cantidadDevuelta||0)), due=net*c.precioUnitario;
-    return `<tr><td>${dateText(c.fecha)}</td><td><b>${esc(c.tienda)}</b></td><td>${esc(c.productoNombre)}</td><td>${c.cantidad}</td><td>${c.cantidadDevuelta||0}</td><td>${money(due)}</td><td>${money(c.montoPagado||0)}</td><td><button class="management-link" data-cons-pay="${esc(c.id)}">Pago</button> <button class="management-link" data-cons-return="${esc(c.id)}">Devolución</button> <button class="management-link danger" data-cons-delete="${esc(c.id)}">Eliminar</button></td></tr>`;
+    const balance=consignmentBalance(c);
+    return `<tr><td>${dateText(c.fecha)}</td><td><b>${esc(c.tienda)}</b></td><td>${esc(c.productoNombre)}</td><td>${c.cantidad}</td><td>${c.cantidadDevuelta||0}</td><td>${money(balance.due)}</td><td>${money(balance.paid)}${balance.credit>0?`<small>Saldo a favor: ${money(balance.credit)}</small>`:''}</td><td><button class="management-link" data-cons-pay="${esc(c.id)}">Pago</button> <button class="management-link" data-cons-return="${esc(c.id)}">Devolución</button> <button class="management-link danger" data-cons-delete="${esc(c.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 function renderConsignmentSummary(root) {
   const map=new Map();
-  appState.consignments.forEach(c=>{const n=Math.max(0,c.cantidad-(c.cantidadDevuelta||0));const row=map.get(c.tienda)||{pieces:0,due:0,paid:0};row.pieces+=n;row.due+=n*c.precioUnitario;row.paid+=Number(c.montoPagado||0);map.set(c.tienda,row);});
-  root.innerHTML=map.size?[...map].map(([name,r])=>`<div class="summary-row"><b>${esc(name)}</b><span>${r.pieces} piezas · pendiente ${money(Math.max(0,r.due-r.paid))}</span></div>`).join(''):'<p class="management-empty">Sin entregas aún.</p>';
+  appState.consignments.forEach(c=>{const n=Math.max(0,c.cantidad-(c.cantidadDevuelta||0));const balance=consignmentBalance(c);const row=map.get(c.tienda)||{pieces:0,due:0,paid:0,credit:0};row.pieces+=n;row.due+=balance.due;row.paid+=balance.paid;row.credit+=balance.credit;map.set(c.tienda,row);});
+  root.innerHTML=map.size?[...map].map(([name,r])=>`<div class="summary-row"><b>${esc(name)}</b><span>${r.pieces} piezas · pendiente ${money(Math.max(0,r.due-r.paid))}${r.credit>0?' · saldo a favor '+money(r.credit):''}</span></div>`).join(''):'<p class="management-empty">Sin entregas aún.</p>';
 }
 
 function attachBackup(root) {
@@ -205,9 +202,10 @@ function attachSales(root) {
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const qty=Math.floor(Number(d.cantidad)), amount=Number(d.monto);
     if(!Number.isInteger(qty)||qty<1||!Number.isFinite(amount)||amount<=0){alert('Cantidad o monto no válido.');return;}
-    const job=getJob(d.jobId);if(job){const remaining=pieces(job)-appState.sales.filter(s=>s.jobId===job.id).reduce((n,s)=>n+Number(s.cantidad||1),0);if(qty>remaining){alert(`No hay suficientes piezas. Disponibles: ${remaining}.`);return;}}
+    const job=getJob(d.jobId);if(job){try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}}
     const product=getProduct(d.productoId);
-    if(product&&qty>availableFor(product.id)){alert(`Stock insuficiente del producto. Disponibles: ${availableFor(product.id)}.`);return;}
+    if(job?.data.productoId && product && job.data.productoId!==product.id){alert('El producto seleccionado no coincide con el producto asignado al trabajo.');return;}
+    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const sale={id:makeId('venta'),jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
     appState.sales.push(sale);saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
@@ -224,18 +222,18 @@ function attachConsignments(root) {
   productSel.addEventListener('change',()=>{const p=getProduct(productSel.value);if(p)form.elements.productoLibre.value=p.codigo+' — '+p.nombre;});
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const product=getProduct(d.productoId);
-    const qty=Math.floor(Number(d.cantidad)),price=Number(d.precioUnitario);
-    if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||qty<1||price<=0){alert('Completa tienda, producto, cantidad y precio válido.');return;}
-    if(product&&qty>availableFor(product.id)){alert(`No hay stock suficiente. Disponible: ${availableFor(product.id)}.`);return;}
-    appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:d.estadoPago,montoPagado:d.estadoPago==='Pagado'?qty*price:0,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),notas:d.notas.trim(),createdAt:Date.now()});
+    const qty=positiveInteger(d.cantidad),price=Number(d.precioUnitario),paid=Number(d.montoPagado);
+    if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
+    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
+    appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
   });
   root.querySelector('#consignments-table').addEventListener('click',e=>{
     const pay=e.target.closest('[data-cons-pay]'),ret=e.target.closest('[data-cons-return]'),del=e.target.closest('[data-cons-delete]');
     const c=appState.consignments.find(x=>x.id===(pay?.dataset.consPay||ret?.dataset.consReturn||del?.dataset.consDelete));if(!c)return;
-    if(pay){const net=Math.max(0,c.cantidad-c.cantidadDevuelta)*c.precioUnitario;const value=prompt(`Monto pagado acumulado (máximo ${money(net)}):`,c.montoPagado||0);if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<0||amount>net){alert('Monto de pago fuera del rango permitido.');return;}c.montoPagado=amount;c.estadoPago=amount===0?'Pendiente':amount>=net?'Pagado':'Parcial';}
-    if(ret){const left=Math.max(0,c.cantidad-c.cantidadDevuelta);const value=prompt(`Cantidad devuelta sin vender (máximo ${left}):`,'1');if(value===null)return;const amount=Math.floor(Number(value));if(!Number.isInteger(amount)||amount<1||amount>left){alert('Cantidad devuelta no válida.');return;}c.cantidadDevuelta+=amount;const net=Math.max(0,c.cantidad-c.cantidadDevuelta)*c.precioUnitario;c.estadoPago=c.montoPagado<=0?'Pendiente':c.montoPagado>=net?'Pagado':'Parcial';}
-    if(del){if(!confirm('¿Eliminar la consignación? Las piezas dejarán de figurar como entregadas y volverán a estar disponibles.'))return;appState.consignments=appState.consignments.filter(x=>x.id!==c.id);}
+    if(pay){const balance=consignmentBalance(c);const value=prompt(`Monto pagado acumulado (valor de mercancía: ${money(balance.due)}):`,c.montoPagado||0);if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<0){alert('Monto de pago no válido.');return;}c.montoPagado=amount;c.estadoPago=amount===0?'Pendiente':amount>=balance.due?'Pagado':'Parcial';}
+    if(ret){const left=Math.max(0,c.cantidad-c.cantidadDevuelta);const value=prompt(`Cantidad devuelta sin vender (máximo ${left}):`,'1');if(value===null)return;const amount=Math.floor(Number(value));if(!Number.isInteger(amount)||amount<1||amount>left){alert('Cantidad devuelta no válida.');return;}c.cantidadDevuelta+=amount;const balance=consignmentBalance(c);c.estadoPago=c.montoPagado<=0?'Pendiente':c.montoPagado>=balance.due?'Pagado':'Parcial';}
+    if(del){if(c.montoPagado>0&&!confirm('Esta consignación tiene pagos registrados. Al eliminarla se perderá ese historial de cobro. ¿Continuar?'))return;if(!c.montoPagado&&!confirm('¿Eliminar la consignación? Las piezas volverán a estar disponibles.'))return;appState.consignments=appState.consignments.filter(x=>x.id!==c.id);}
     saveAppState();renderManagementView(root,'consignments');notify('Consignación actualizada.');
   });
   renderConsignmentSummary(root.querySelector('#consignment-summary'));

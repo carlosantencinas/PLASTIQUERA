@@ -3,8 +3,6 @@ import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 const STORAGE_KEY = 'plastiqueria:data:v1';
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [] };
 
-function clone(value) { return JSON.parse(JSON.stringify(value)); }
-
 export function loadAppState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

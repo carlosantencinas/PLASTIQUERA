@@ -291,6 +291,13 @@ export function renderJobsView(container) {
     event.preventDefault();
     const { data } = values();
     if (!data.nombre) return;
+    if (editingId) {
+      const sold = appState.sales.filter(sale => sale.jobId === editingId).reduce((sum, sale) => sum + Number(sale.cantidad || 1), 0);
+      if (data.piezasVendibles < sold) {
+        window.alert(`No puedes reducir las piezas vendibles a ${data.piezasVendibles}: ya existen ${sold} piezas vendidas para este trabajo.`);
+        return;
+      }
+    }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     try {
       const movement = applyJobMaterial(jobId, data);
