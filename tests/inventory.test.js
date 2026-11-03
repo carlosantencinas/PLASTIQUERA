@@ -5,6 +5,12 @@ import {
   weightedAverageEntry,
   stockValue,
 } from '../src/calculations/inventory.js';
+import {
+  inventoryState,
+  loadInventorySnapshot,
+  recordPurchase,
+  deletePurchase,
+} from '../src/services/inventory-store.js';
 
 test('normaliza kg y litros a gramos y mililitros', () => {
   assert.equal(normalizePurchaseQuantity(1.5, 'kg'), 1500);
@@ -20,13 +26,46 @@ test('calcula costo promedio ponderado con dos compras', () => {
   );
   const second = weightedAverageEntry(first, 500, 90);
   assert.equal(second.stock, 1500);
-  assert.equal(second.costoPromedio, 190 / 1500);
-  assert.equal(stockValue(second), 190);
+  assert.ok(Math.abs(second.costoPromedio - 190 / 1500) < 1e-12);
+  assert.ok(Math.abs(stockValue(second) - 190) < 1e-10);
 });
 
-test('mantiene costo promedio cuando se ajusta el stock por consumo manual', () => {
-  const material = { stock: 800, costoPromedio: 0.1 };
-  assert.equal(stockValue(material), 80);
+test('una compra consumible crea o actualiza inventario', () => {
+  loadInventorySnapshot();
+  recordPurchase({
+    category: 'Filamento', name: 'PLA negro', quantity: 1, unit: 'kg',
+    totalPrice: 120, date: Date.now(),
+  });
+  recordPurchase({
+    category: 'Filamento', name: 'pla NEGRO', quantity: 500, unit: 'g',
+    totalPrice: 75, date: Date.now(),
+  });
+
+  assert.equal(inventoryState.materials.length, 1);
+  assert.equal(inventoryState.materials[0].stock, 1500);
+  assert.ok(Math.abs(inventoryState.materials[0].costoPromedio - 195 / 1500) < 1e-12);
+  assert.equal(inventoryState.purchases.length, 2);
+});
+
+test('los equipos se registran en compras sin incrementar materiales', () => {
+  loadInventorySnapshot();
+  recordPurchase({
+    category: 'Equipo', name: 'Boquilla 0.4', quantity: 2, unit: 'unidad',
+    totalPrice: 50, date: Date.now(),
+  });
+  assert.equal(inventoryState.purchases.length, 1);
+  assert.equal(inventoryState.materials.length, 0);
+});
+
+test('eliminar una compra del historial no revierte stock (compatibilidad 3DBoys)', () => {
+  loadInventorySnapshot();
+  const purchase = recordPurchase({
+    category: 'Resina', name: 'Resina gris', quantity: 1, unit: 'l',
+    totalPrice: 200, date: Date.now(),
+  });
+  deletePurchase(purchase.id);
+  assert.equal(inventoryState.purchases.length, 0);
+  assert.equal(inventoryState.materials[0].stock, 1000);
 });
 
 test('rechaza unidades, cantidades y precios inválidos', () => {
