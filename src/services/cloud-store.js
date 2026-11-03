@@ -4,7 +4,7 @@ import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
 
 const sharedRef = db ? doc(db, 'talleres3dboys', 'principal') : null;
-const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','jobMovements'];
+const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements'];
 let baseline = null;
 let baselineReady = false;
 
@@ -17,6 +17,7 @@ function normalized(data = {}) {
     productos: Array.isArray(data.productos) ? data.productos : (Array.isArray(data.products) ? data.products : []),
     clientes: Array.isArray(data.clientes) ? data.clientes : (Array.isArray(data.clients) ? data.clients : []),
     consignaciones: Array.isArray(data.consignaciones) ? data.consignaciones : (Array.isArray(data.consignments) ? data.consignments : []),
+    expenses: Array.isArray(data.expenses) ? data.expenses : [],
     jobMovements: Array.isArray(data.jobMovements) ? data.jobMovements : [],
   };
 }
@@ -35,7 +36,7 @@ export async function readSharedState() {
       Boolean(raw.products?.length || raw.clients?.length || raw.consignments?.length),
     data: {
       jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
-      products: data.productos, clients: data.clientes, consignments: data.consignaciones,
+      products: data.productos, clients: data.clientes, consignments: data.consignaciones, expenses: data.expenses,
       jobMovements: data.jobMovements,
     },
   };
@@ -46,7 +47,7 @@ export async function writeSharedState() {
   const payload = {
     jobs: appState.jobs, materials: inventoryState.materials, purchases: inventoryState.purchases,
     sales: appState.sales, productos: appState.products, clientes: appState.clients,
-    consignaciones: appState.consignments, jobMovements: inventoryState.jobMovements,
+    consignaciones: appState.consignments, expenses: appState.expenses, jobMovements: inventoryState.jobMovements,
   };
   await runTransaction(db, async transaction => {
     const snapshot = await transaction.get(sharedRef);
