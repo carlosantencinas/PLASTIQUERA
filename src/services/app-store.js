@@ -3,6 +3,46 @@ import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 const STORAGE_KEY = 'plastiqueria:data:v1';
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [] };
 
+function restoreLegacyJobMovements() {
+  const known = new Set(inventoryState.jobMovements.map(item => item.jobId));
+  for (const job of appState.jobs) {
+    const data = job?.data || {};
+    if (known.has(job.id) || !data.materialId || data.materialId === 'manual' || Number(data.gramos) <= 0) continue;
+    const material = inventoryState.materials.find(item => item.id === data.materialId);
+    const unitCost = material?.costoPromedio ?? Number(data.precioKg || 0) / 1000;
+    inventoryState.jobMovements.push({
+      id: 'legacy_' + job.id, jobId: job.id, jobNombre: String(data.nombre || ''),
+      materialId: data.materialId, materialNombre: String(data.materialNombre || material?.nombre || 'Material histórico'),
+      grams: Number(data.gramos), costoUnitario: unitCost, costoTotal: Number(data.gramos) * unitCost,
+      fecha: Number(data.fecha || job.createdAt || Date.now()), legacy: true,
+    });
+  }
+}
+function normalizeConsignments() {
+  appState.consignments.forEach(item => {
+    if (item.cantidadDevuelta === undefined) item.cantidadDevuelta = item.estadoPago === 'Devuelto' ? item.cantidad : 0;
+    if (item.estadoPago === 'Devuelto') item.estadoPago = 'Pendiente';
+    if (item.montoPagado === undefined) item.montoPagado = item.estadoPago === 'Pagado' ? Number(item.valorTotal || (item.cantidad || 0) * (item.precioUnitario || 0)) : 0;
+  });
+}
+export function hasAppData() {
+  return Boolean(appState.jobs.length || appState.products.length || appState.clients.length ||
+    appState.sales.length || appState.consignments.length || inventoryState.materials.length || inventoryState.purchases.length);
+}
+export function replaceAppStateFromCloud(data = {}) {
+  appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
+  appState.products = Array.isArray(data.products) ? data.products : (Array.isArray(data.productos) ? data.productos : []);
+  appState.clients = Array.isArray(data.clients) ? data.clients : (Array.isArray(data.clientes) ? data.clientes : []);
+  appState.sales = Array.isArray(data.sales) ? data.sales : [];
+  appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
+  loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
+  normalizeConsignments();
+  restoreLegacyJobMovements();
+  saveAppState({ dispatch: false });
+  window.dispatchEvent(new Event('appstate:loaded'));
+}
+
+
 export function loadAppState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -18,10 +58,8 @@ export function loadAppState() {
       purchases: data.purchases || [],
       jobMovements: data.jobMovements || [],
     });
-    appState.consignments.forEach(item => {
-      if (item.cantidadDevuelta === undefined) item.cantidadDevuelta = item.estadoPago === 'Devuelto' ? item.cantidad : 0;
-      if (item.estadoPago === 'Devuelto') item.estadoPago = 'Pendiente';
-    });
+    normalizeConsignments();
+    restoreLegacyJobMovements();
     return true;
   } catch (error) {
     console.error('No se pudo leer el almacenamiento local de Plastiquería', error);
@@ -29,7 +67,7 @@ export function loadAppState() {
   }
 }
 
-export function saveAppState() {
+export function saveAppState({ dispatch = true } = {}) {
   const data = {
     schemaVersion: 1,
     savedAt: new Date().toISOString(),
@@ -44,7 +82,7 @@ export function saveAppState() {
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt: data.savedAt } }));
+    if (dispatch) window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt: data.savedAt } }));
     return true;
   } catch (error) {
     console.error('No se pudieron guardar los datos', error);
@@ -83,7 +121,7 @@ export function importBackup(file) {
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
-        const arrays = ['jobs','products','clients','sales','consignments','materials','purchases','jobMovements'];
+        const arrays = ['jobs','products','productos','clients','clientes','sales','consignments','consignaciones','materials','purchases','jobMovements'];
         if (!arrays.some(key => Array.isArray(data[key]))) throw new Error('No se encontraron datos de Plastiquería en el archivo.');
         appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
         appState.products = Array.isArray(data.products) ? data.products : (data.productos || []);
