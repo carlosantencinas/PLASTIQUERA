@@ -1,7 +1,7 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 
 const STORAGE_KEY = 'plastiqueria:data:v1';
-export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [] };
+export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [] };
 
 function restoreLegacyJobMovements() {
   const known = new Set(inventoryState.jobMovements.map(item => item.jobId));
@@ -27,7 +27,7 @@ function normalizeConsignments() {
 }
 export function hasAppData() {
   return Boolean(appState.jobs.length || appState.products.length || appState.clients.length ||
-    appState.sales.length || appState.consignments.length || inventoryState.materials.length || inventoryState.purchases.length);
+    appState.sales.length || appState.consignments.length || appState.expenses.length || inventoryState.materials.length || inventoryState.purchases.length);
 }
 export function replaceAppStateFromCloud(data = {}) {
   appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
@@ -35,6 +35,8 @@ export function replaceAppStateFromCloud(data = {}) {
   appState.clients = Array.isArray(data.clients) ? data.clients : (Array.isArray(data.clientes) ? data.clientes : []);
   appState.sales = Array.isArray(data.sales) ? data.sales : [];
   appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
+    appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+  appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
   normalizeConsignments();
   restoreLegacyJobMovements();
@@ -76,6 +78,7 @@ export function saveAppState({ dispatch = true } = {}) {
     clients: appState.clients,
     sales: appState.sales,
     consignments: appState.consignments,
+    expenses: appState.expenses,
     materials: inventoryState.materials,
     purchases: inventoryState.purchases,
     jobMovements: inventoryState.jobMovements,
@@ -101,6 +104,7 @@ export function exportBackup() {
     clients: appState.clients,
     sales: appState.sales,
     consignments: appState.consignments,
+    expenses: appState.expenses,
     materials: inventoryState.materials,
     purchases: inventoryState.purchases,
     jobMovements: inventoryState.jobMovements,
@@ -121,13 +125,14 @@ export function importBackup(file) {
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
-        const arrays = ['jobs','products','productos','clients','clientes','sales','consignments','consignaciones','materials','purchases','jobMovements'];
+        const arrays = ['jobs','products','productos','clients','clientes','sales','consignments','consignaciones','expenses','materials','purchases','jobMovements'];
         if (!arrays.some(key => Array.isArray(data[key]))) throw new Error('No se encontraron datos de Plastiquería en el archivo.');
         appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
         appState.products = Array.isArray(data.products) ? data.products : (data.productos || []);
         appState.clients = Array.isArray(data.clients) ? data.clients : (data.clientes || []);
         appState.sales = Array.isArray(data.sales) ? data.sales : [];
         appState.consignments = Array.isArray(data.consignments) ? data.consignments : (data.consignaciones || []);
+        appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
         loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
         normalizeConsignments();
         restoreLegacyJobMovements();
