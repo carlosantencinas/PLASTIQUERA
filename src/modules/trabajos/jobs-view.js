@@ -49,16 +49,19 @@ function readForm(form) {
   const fecha = fd.get('fecha')
     ? new Date(`${fd.get('fecha')}T12:00:00`).getTime()
     : Date.now();
+  const materialId = String(fd.get('materialId') || 'manual');
+  const selectedMaterial = materialId === 'manual' ? null : getMaterialById(materialId);
+  const precioKg = selectedMaterial ? selectedMaterial.costoPromedio * 1000 : number(fd.get('precioKg'));
 
   return {
     nombre: String(fd.get('nombre') || '').trim(),
     cliente: String(fd.get('cliente') || '').trim(),
     fecha,
     descripcion: String(fd.get('descripcion') || '').trim(),
-    materialId: 'manual',
-    materialNombre: '',
+    materialId,
+    materialNombre: selectedMaterial?.nombre || '',
     gramos: number(fd.get('gramos')),
-    precioKg: number(fd.get('precioKg')),
+    precioKg,
     horasImp,
     minImp,
     horasImpresion: horasImp + minImp / 60,
@@ -249,6 +252,7 @@ export function renderJobsView(container) {
   }
 
   function refresh() {
+    refreshMaterialOptions();
     const { data, calc } = values();
     preview.innerHTML = renderPreview(data, calc);
     const count = jobs.length;
@@ -273,7 +277,9 @@ export function renderJobsView(container) {
     refresh();
   }
 
-  form.addEventListener('input', refresh);\n  materialSelect.addEventListener('change', refresh);\n  window.addEventListener('inventory:updated', refresh);
+  form.addEventListener('input', refresh);
+  materialSelect.addEventListener('change', refresh);
+  window.addEventListener('inventory:updated', refresh);
   form.elements.tipoImpresora.addEventListener('change', () => {
     const selected = printerOptions.find(option => option[0] === form.elements.tipoImpresora.value);
     if (selected?.[2]) form.elements.watts.value = selected[2];
@@ -328,7 +334,9 @@ export function renderJobsView(container) {
     if (deleteButton) {
       const job = jobs.find(item => item.id === deleteButton.dataset.delete);
       if (!job || !window.confirm(`¿Eliminar el trabajo "${job.data.nombre}"? Esta acción no se puede deshacer.`)) return;
-      removeJobMaterial(job.id);\n      jobs = jobs.filter(item => item.id !== job.id);\n      window.dispatchEvent(new Event('inventory:updated'));
+      removeJobMaterial(job.id);
+      jobs = jobs.filter(item => item.id !== job.id);
+      window.dispatchEvent(new Event('inventory:updated'));
       if (editingId === job.id) reset();
       else refresh();
     }
