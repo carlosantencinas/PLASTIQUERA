@@ -3,14 +3,14 @@
   "short_name": "Plastiquería",
   "description": "Sistema de gestión para taller de impresión 3D.",
   "lang": "es",
-  "start_url": "/PLASTIQUERA/",
-  "scope": "/PLASTIQUERA/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#111827",
   "theme_color": "#111827",
   "icons": [
     {
-      "src": "/PLASTIQUERA/icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
