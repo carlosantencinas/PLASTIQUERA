@@ -1,3 +1,4 @@
+import { saveAppState } from '../../services/app-store.js';
 import {
   UNIT_INFO,
   formatStock,
@@ -191,6 +192,7 @@ export function renderInventoryView(container) {
         ...data,
         date: data.date ? new Date(data.date + 'T12:00:00').getTime() : Date.now(),
       });
+      saveAppState();
       form.reset();
       form.elements.date.value = dateInput(Date.now());
       const defaults = { Filamento: 'g', Resina: 'ml', Insumo: 'unidad', Equipo: 'unidad' };
@@ -210,13 +212,13 @@ export function renderInventoryView(container) {
       const label = material.unidad === 'g' ? 'gramos' : material.unidad === 'ml' ? 'mililitros' : 'unidades';
       const value = window.prompt(`Nuevo stock de ${material.nombre} (${label}):`, material.stock);
       if (value === null) return;
-      try { setMaterialStock(material.id, value); refresh(); }
+      try { setMaterialStock(material.id, value); saveAppState(); refresh(); }
       catch (error) { window.alert(error.message); }
     }
     if (remove) {
       const material = inventoryState.materials.find(item => item.id === remove.dataset.removeMaterial);
       if (!material || !window.confirm(`¿Eliminar ${material.nombre} del inventario? El historial de compras se conservará.`)) return;
-      try { deleteMaterial(material.id); refresh(); }
+      try { deleteMaterial(material.id); saveAppState(); refresh(); }
       catch (error) { window.alert(error.message); }
     }
   });
@@ -226,6 +228,7 @@ export function renderInventoryView(container) {
     if (!remove) return;
     if (!window.confirm('¿Eliminar esta compra del historial? El stock NO se modificará.')) return;
     deletePurchase(remove.dataset.removePurchase);
+    saveAppState();
     refresh();
   });
 

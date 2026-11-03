@@ -1,4 +1,5 @@
 import { calculateJob } from '../../calculations/jobs.js';
+import { appState, saveAppState } from '../../services/app-store.js';
 import { inventoryState, getMaterialById, applyJobMaterial, removeJobMaterial } from '../../services/inventory-store.js';
 
 const money = value =>
@@ -33,7 +34,7 @@ const printerOptions = [
   ['Otro / Ingresar manualmente', 'Otro / Ingresar manualmente', ''],
 ];
 
-let jobs = [];
+let jobs = appState.jobs;
 let editingId = null;
 
 function input(name, label, type = 'number', placeholder = '', extra = '') {
@@ -153,7 +154,7 @@ export function renderJobsView(container) {
     <section class="jobs-module">
       <div class="jobs-intro">
         <div><p class="eyebrow">PRODUCCIÓN</p><h2>Trabajos de impresión</h2><p>Registra pedidos y calcula el costo real estimado de cada lote.</p></div>
-        <span class="jobs-local-tag">Módulo en desarrollo</span>
+        <span class="jobs-local-tag">Guardado local automático</span>
       </div>
       <div class="jobs-stats" id="jobsStats"></div>
       <div class="jobs-layout">
@@ -203,7 +204,7 @@ export function renderJobsView(container) {
             <button class="job-save" type="submit" id="jobSaveButton">Guardar trabajo</button>
             <button class="job-reset" type="button" id="jobResetButton">Limpiar</button>
           </div>
-          <p class="job-help">Los registros de esta etapa permanecen en memoria mientras la página está abierta. Aún no se guardan en Firebase.</p>
+          <p class="job-help">Los cambios se guardan automáticamente en este navegador. Exporta respaldos periódicos desde el panel de gestión.</p>
         </form>
         <section class="jobs-card jobs-preview-card">
           <div class="jobs-card-heading"><div><p class="eyebrow">ANÁLISIS DE COSTOS</p><h3>Vista previa</h3></div><span class="jobs-step">02</span></div>
@@ -305,6 +306,7 @@ export function renderJobsView(container) {
       } else {
         jobs.push({ id: jobId, createdAt: Date.now(), data, calc });
       }
+      saveAppState();
       window.dispatchEvent(new Event('inventory:updated'));
       reset();
     } catch (error) {
@@ -335,7 +337,8 @@ export function renderJobsView(container) {
       const job = jobs.find(item => item.id === deleteButton.dataset.delete);
       if (!job || !window.confirm(`¿Eliminar el trabajo "${job.data.nombre}"? Esta acción no se puede deshacer.`)) return;
       removeJobMaterial(job.id);
-      jobs = jobs.filter(item => item.id !== job.id);
+      jobs.splice(jobs.findIndex(item => item.id === job.id), 1);
+      saveAppState();
       window.dispatchEvent(new Event('inventory:updated'));
       if (editingId === job.id) reset();
       else refresh();
