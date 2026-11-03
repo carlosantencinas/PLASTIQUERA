@@ -24,7 +24,7 @@ const sample = {
 test('conserva las fórmulas originales de costos y precio', () => {
   const result = calculateJob(sample);
   assert.equal(result.costoMaterial, 10);
-  assert.equal(result.costoEnergia, 0.6);
+  assert.ok(Math.abs(result.costoEnergia - 0.6) < 1e-12);
   assert.equal(result.costoMantenimiento, 1);
   assert.equal(result.costoManoObra, 20);
   assert.equal(result.costoOtros, 3);
