@@ -33,7 +33,7 @@ La sincronización usa transacciones y compara las listas con la última lectura
 3. Crea manualmente las cuentas autorizadas en Firebase Authentication (no hay registro público).
 4. Configura las seis variables `VITE_FIREBASE_*`.
 
-Para desarrollo, configura esas variables en `.env.local`. Para GitHub Pages, agrégalas como *Repository variables* en **Settings → Secrets and variables → Actions → Variables**. Son valores de configuración pública del cliente web; nunca incluyas cuentas de servicio ni credenciales administrativas.
+Para desarrollo, configura esas variables en `.env.local`. Para GitHub Pages, agrégalas como *Repository secrets* en **Settings → Secrets and variables → Actions → Secrets**. Son valores de configuración pública del cliente web; nunca incluyas cuentas de servicio ni credenciales administrativas.
 
 Si las variables no están definidas, la aplicación permanece en modo local.
 
