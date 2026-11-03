@@ -10,6 +10,8 @@ import {
   loadInventorySnapshot,
   recordPurchase,
   deletePurchase,
+  applyJobMaterial,
+  removeJobMaterial,
 } from '../src/services/inventory-store.js';
 
 test('normaliza kg y litros a gramos y mililitros', () => {
