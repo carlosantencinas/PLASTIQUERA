@@ -1,32 +1,45 @@
 # Plastiquería
 
-Aplicación web de gestión para un taller de impresión 3D. Proyecto nuevo e independiente del repositorio original **3DBoys**.
+Aplicación web para administrar un taller de impresión 3D. Es un repositorio independiente: **3DBoys permanece intacto**.
 
-## Módulos disponibles
+## Módulos
 
-- **Trabajos:** costos, energía, mantenimiento, mano de obra, fallas, margen, piezas vendibles, edición e historial.
-- **Inventario y compras:** filamentos, resinas, insumos y equipos; unidades normalizadas; costo promedio ponderado; ajustes y consumos asociados a trabajos.
-- **Productos:** catálogo, códigos, asignación de trabajos y existencias derivadas.
+- **Panel principal:** resumen de trabajos, productos, ventas y cuentas pendientes de consignación.
+- **Trabajos:** registro, edición, costos de material/energía/mantenimiento/mano de obra, fallas, margen, piezas vendibles y consumo de inventario.
+- **Inventario y compras:** filamentos, resinas, insumos y equipos; conversión de unidades; costo promedio ponderado; ajustes; historial y consumo por trabajo.
+- **Productos:** catálogo, códigos, asignación de trabajos y stock calculado.
 - **Clientes:** directorio de clientes y tiendas.
-- **Ventas:** registro, validación de existencias, historial, CSV e impresión.
-- **Consignaciones:** entregas a tiendas, pagos acumulados, pagos parciales, devoluciones, saldos pendientes y saldos a favor.
-- **Panel principal:** resumen comercial y operativo.
+- **Ventas:** registro, control de cantidades, historial, CSV e impresión.
+- **Consignaciones:** entregas, pagos acumulados/parciales, devoluciones, saldos pendientes y saldos a favor.
+- **Respaldo:** exportación e importación de datos JSON.
 
-## Persistencia y respaldo
+## Persistencia local
 
-La versión desplegada guarda datos en el almacenamiento local del navegador. Los datos no se sincronizan entre dispositivos ni usuarios. Usa **Exportar respaldo** regularmente y conserva los archivos JSON fuera del navegador.
+Sin configuración de Firebase, los datos se guardan en el navegador mediante localStorage. No se comparten entre dispositivos ni usuarios. Exporta respaldos periódicos y guárdalos fuera del equipo.
 
-La importación de un respaldo reemplaza los datos locales actuales. Antes de importar, exporta una copia del estado vigente.
+La importación reemplaza los datos locales actuales. Antes de importar, descarga un respaldo del estado vigente. El importador admite los nombres de campos usados por el documento de 3DBoys (productos, clientes y consignaciones).
 
-## Firebase
+## Firebase Authentication y Firestore
 
-El cliente de Firebase está preparado, pero la lectura y escritura en Firestore todavía están deshabilitadas. La migración debe conservar el documento compartido `talleres3dboys/principal`, revisar las reglas de seguridad y establecer control de concurrencia antes de activar sincronización. No se debe modificar ni borrar la base original durante la migración.
+La aplicación incorpora acceso por correo/contraseña (sin registro público) y sincronización opcional con el documento compartido `talleres3dboys/principal`.
 
-Configura las variables `VITE_FIREBASE_*` en un archivo local `.env.local` para desarrollo. No incluyas credenciales privadas ni cuentas de servicio en el frontend.
+Se conservan los campos legados `jobs`, `materials`, `purchases`, `sales`, `productos`, `clientes` y `consignaciones`. Plastiquería añade `jobMovements` para registrar consumos de material por trabajo. Al importar datos antiguos, reconstruye los movimientos históricos a partir de los trabajos y materiales para evitar volver a descontar el mismo consumo al editarlos.
 
-## Aplicación instalable
+La sincronización usa transacciones y compara las listas con la última lectura. Si detecta cambios externos —incluidos cambios realizados desde 3DBoys u otra sesión— detiene la escritura para evitar sobrescribirlos. Los cambios se guardan primero en el navegador; si falla la nube, los datos locales se conservan. Si hay datos locales y remotos, la aplicación solicita elegir qué fuente utilizar.
 
-Plastiquería incluye un manifiesto y caché de aplicación para instalarse como PWA y abrir su interfaz básica sin conexión. La sincronización en la nube, cuando se habilite, requerirá conexión.
+**Antes de activar Firebase:**
+1. Haz un respaldo del documento `talleres3dboys/principal`.
+2. Revisa las reglas de Firestore para que sólo usuarios autenticados y autorizados puedan leer/escribir.
+3. Crea manualmente las cuentas autorizadas en Firebase Authentication (no hay registro público).
+4. Configura las seis variables `VITE_FIREBASE_*`.
+
+Para desarrollo, configura esas variables en `.env.local`. Para GitHub Pages, agrégalas como *Repository variables* en **Settings → Secrets and variables → Actions → Variables**. Son valores de configuración pública del cliente web; nunca incluyas cuentas de servicio ni credenciales administrativas.
+
+Si las variables no están definidas, la aplicación permanece en modo local.
+
+## PWA
+
+Incluye manifiesto, icono y caché de interfaz para instalar la aplicación y abrir la estructura básica sin conexión. La sincronización con Firestore requiere conexión.
 
 ## Desarrollo
 
@@ -39,8 +52,6 @@ npm test
 npm run build
 ```
 
-## Despliegue
-
-GitHub Actions ejecuta las pruebas, compila y publica en GitHub Pages al actualizar `main`.
+GitHub Actions ejecuta las pruebas, compila y publica automáticamente en GitHub Pages al actualizar `main`.
 
 Repositorio: https://github.com/carlosantencinas/PLASTIQUERA

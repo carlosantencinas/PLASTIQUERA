@@ -91,6 +91,8 @@ export function importBackup(file) {
         appState.sales = Array.isArray(data.sales) ? data.sales : [];
         appState.consignments = Array.isArray(data.consignments) ? data.consignments : (data.consignaciones || []);
         loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
+        normalizeConsignments();
+        restoreLegacyJobMovements();
         if (!saveAppState()) throw new Error('No se pudo guardar el respaldo importado en este navegador.');
         resolve(true);
       } catch (error) { reject(error); }

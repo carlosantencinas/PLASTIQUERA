@@ -178,6 +178,8 @@ export function renderInventoryView(container) {
     container.querySelector('#inventoryMaterialNames').innerHTML = names.map(name => `<option value="${escapeText(name)}"></option>`).join('');
   }
 
+  window.addEventListener('appstate:loaded', refresh);
+
   form.elements.date.value = dateInput(Date.now());
   form.elements.category.addEventListener('change', () => {
     const defaults = { Filamento: 'g', Resina: 'ml', Insumo: 'unidad', Equipo: 'unidad' };

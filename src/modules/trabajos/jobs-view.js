@@ -268,6 +268,8 @@ export function renderJobsView(container) {
     container.querySelector('#jobsCount').textContent = `${count} ${count === 1 ? 'registro' : 'registros'}`;
   }
 
+  window.addEventListener('appstate:loaded', refresh);
+
   function reset() {
     editingId = null;
     form.reset();
