@@ -335,7 +335,12 @@ export function renderJobsView(container) {
     }
     if (deleteButton) {
       const job = jobs.find(item => item.id === deleteButton.dataset.delete);
-      if (!job || !window.confirm(`¿Eliminar el trabajo "${job.data.nombre}"? Esta acción no se puede deshacer.`)) return;
+      if (!job) return;
+      if (appState.sales.some(sale => sale.jobId === job.id)) {
+        window.alert('No se puede eliminar este trabajo porque tiene ventas registradas. Elimina o reasigna primero esas ventas para conservar el historial.');
+        return;
+      }
+      if (!window.confirm(`¿Eliminar el trabajo "${job.data.nombre}"? Esta acción no se puede deshacer.`)) return;
       removeJobMaterial(job.id);
       jobs.splice(jobs.findIndex(item => item.id === job.id), 1);
       saveAppState();
