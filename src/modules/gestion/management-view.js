@@ -315,7 +315,7 @@ function attachFinance(root) {
   refresh();
 }
 
-function renderManagementView(container, section='dashboard') {
+export function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
   if(section==='products'){renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
