@@ -146,6 +146,7 @@ export function renderInventoryView(container) {
     purchasesRoot.innerHTML = renderPurchases();
     container.querySelector('#inventoryMaterialCount').textContent = inventoryState.materials.length + ' materiales';
     container.querySelector('#inventoryPurchaseCount').textContent = inventoryState.purchases.length + ' compras';
+    window.dispatchEvent(new Event('inventory:updated'));
 
     const names = [...new Set(inventoryState.materials.map(item => item.nombre))];
     container.querySelector('#inventoryMaterialNames').innerHTML = names.map(name => `<option value="${escapeText(name)}"></option>`).join('');
@@ -190,8 +191,8 @@ export function renderInventoryView(container) {
     if (remove) {
       const material = inventoryState.materials.find(item => item.id === remove.dataset.removeMaterial);
       if (!material || !window.confirm(`¿Eliminar ${material.nombre} del inventario? El historial de compras se conservará.`)) return;
-      deleteMaterial(material.id);
-      refresh();
+      try { deleteMaterial(material.id); refresh(); }
+      catch (error) { window.alert(error.message); }
     }
   });
 
