@@ -73,3 +73,48 @@ test('rechaza unidades, cantidades y precios inválidos', () => {
   assert.throws(() => normalizePurchaseQuantity(0, 'kg'));
   assert.throws(() => weightedAverageEntry({ stock: 0, costoPromedio: 0 }, 100, 0));
 });
+
+
+test('consume material once, replace the consumption on edit, and restore on delete', () => {
+  loadInventorySnapshot({
+    materials: [{ id: 'pla', nombre: 'PLA negro', categoria: 'Filamento', unidad: 'g', stock: 1000, costoPromedio: 0.12 }],
+  });
+
+  applyJobMaterial('job-1', { materialId: 'pla', gramos: 100 });
+  assert.equal(inventoryState.materials[0].stock, 900);
+  assert.equal(inventoryState.jobMovements.length, 1);
+
+  applyJobMaterial('job-1', { materialId: 'pla', gramos: 150 });
+  assert.equal(inventoryState.materials[0].stock, 850);
+  assert.equal(inventoryState.jobMovements.length, 1);
+  assert.equal(inventoryState.jobMovements[0].grams, 150);
+
+  removeJobMaterial('job-1');
+  assert.equal(inventoryState.materials[0].stock, 1000);
+  assert.equal(inventoryState.jobMovements.length, 0);
+});
+
+test('rechaza stock insuficiente y conserva el consumo anterior al editar', () => {
+  loadInventorySnapshot({
+    materials: [{ id: 'pla', nombre: 'PLA negro', categoria: 'Filamento', unidad: 'g', stock: 1000, costoPromedio: 0.12 }],
+  });
+  applyJobMaterial('job-2', { materialId: 'pla', gramos: 100 });
+
+  assert.throws(
+    () => applyJobMaterial('job-2', { materialId: 'pla', gramos: 2000 }),
+    /Stock insuficiente/,
+  );
+  assert.equal(inventoryState.materials[0].stock, 900);
+  assert.equal(inventoryState.jobMovements.length, 1);
+  assert.equal(inventoryState.jobMovements[0].grams, 100);
+});
+
+test('cambiar un trabajo a costo manual devuelve el material consumido', () => {
+  loadInventorySnapshot({
+    materials: [{ id: 'pla', nombre: 'PLA negro', categoria: 'Filamento', unidad: 'g', stock: 1000, costoPromedio: 0.12 }],
+  });
+  applyJobMaterial('job-3', { materialId: 'pla', gramos: 250 });
+  applyJobMaterial('job-3', { materialId: 'manual', gramos: 250 });
+  assert.equal(inventoryState.materials[0].stock, 1000);
+  assert.equal(inventoryState.jobMovements.length, 0);
+});
