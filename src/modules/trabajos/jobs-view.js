@@ -1,4 +1,5 @@
 import { calculateJob } from '../../calculations/jobs.js';
+import { inventoryState, getMaterialById, applyJobMaterial, removeJobMaterial } from '../../services/inventory-store.js';
 
 const money = value =>
   'Bs ' + Number(value || 0).toLocaleString('es-BO', {
@@ -163,10 +164,16 @@ export function renderJobsView(container) {
           </div>
           <div class="jobs-subheading">Material</div>
           <div class="jobs-form-grid">
+            <label class="job-field job-span-2"><span>Material del inventario</span>
+              <select name="materialId" id="jobMaterialSelect">
+                <option value="manual">Costo manual (sin descontar inventario)</option>
+                ${inventoryState.materials.filter(item => item.unidad === 'g').map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g disponibles · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`).join('')}
+              </select>
+            </label>
             ${input('gramos','Cantidad utilizada (g)','number','120')}
             ${input('precioKg','Precio del material (Bs/kg)','number','95')}
           </div>
-          <p class="job-help">En esta primera versión se ingresa el precio manualmente. La conexión con el inventario se incorporará después.</p>
+          <p class="job-help" id="jobMaterialHelp">Selecciona un material para usar su costo promedio y descontar el consumo. Si eliges costo manual, el inventario no cambia.</p>
           <div class="jobs-subheading">Impresión</div>
           <div class="jobs-form-grid">
             ${input('horasImp','Horas de impresión','number','4')}
@@ -211,6 +218,30 @@ export function renderJobsView(container) {
   const preview = container.querySelector('#jobPreview');
   const history = container.querySelector('#jobHistory');
   const stats = container.querySelector('#jobsStats');
+  const materialSelect = form.elements.materialId;
+  const materialPrice = form.elements.precioKg;
+  const materialHelp = container.querySelector('#jobMaterialHelp');
+
+  function refreshMaterialOptions() {
+    const selected = materialSelect.value || 'manual';
+    const options = inventoryState.materials
+      .filter(item => item.unidad === 'g')
+      .map(item => {
+        const disabled = item.stock <= 0 ? ' disabled' : '';
+        return `<option value="${escapeText(item.id)}"${disabled}>${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g disponibles · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`;
+      }).join('');
+    materialSelect.innerHTML = '<option value="manual">Costo manual (sin descontar inventario)</option>' + options;
+    materialSelect.value = inventoryState.materials.some(item => item.id === selected && item.unidad === 'g') ? selected : 'manual';
+    const material = getMaterialById(materialSelect.value);
+    if (material) {
+      materialPrice.value = (material.costoPromedio * 1000).toFixed(4);
+      materialPrice.readOnly = true;
+      materialHelp.textContent = `Costo promedio: Bs ${(material.costoPromedio * 1000).toFixed(2)}/kg. Al guardar se descontarán los gramos utilizados del stock.`;
+    } else {
+      materialPrice.readOnly = false;
+      materialHelp.textContent = 'Costo manual: no se descontará material del inventario.';
+    }
+  }
 
   function values() {
     const data = readForm(form);
@@ -242,7 +273,7 @@ export function renderJobsView(container) {
     refresh();
   }
 
-  form.addEventListener('input', refresh);
+  form.addEventListener('input', refresh);\n  materialSelect.addEventListener('change', refresh);\n  window.addEventListener('inventory:updated', refresh);
   form.elements.tipoImpresora.addEventListener('change', () => {
     const selected = printerOptions.find(option => option[0] === form.elements.tipoImpresora.value);
     if (selected?.[2]) form.elements.watts.value = selected[2];
@@ -251,20 +282,28 @@ export function renderJobsView(container) {
 
   form.addEventListener('submit', event => {
     event.preventDefault();
-    const { data, calc } = values();
+    const { data } = values();
     if (!data.nombre) return;
-    if (editingId) {
-      const index = jobs.findIndex(job => job.id === editingId);
-      if (index !== -1) jobs[index] = { ...jobs[index], data, calc, updatedAt: Date.now() };
-    } else {
-      jobs.push({
-        id: globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        createdAt: Date.now(),
-        data,
-        calc,
-      });
+    const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+    try {
+      const movement = applyJobMaterial(jobId, data);
+      if (movement) {
+        data.materialId = movement.materialId;
+        data.materialNombre = movement.materialNombre;
+        data.precioKg = movement.costoUnitario * 1000;
+      }
+      const calc = calculateJob(data);
+      if (editingId) {
+        const index = jobs.findIndex(job => job.id === editingId);
+        if (index !== -1) jobs[index] = { ...jobs[index], data, calc, updatedAt: Date.now() };
+      } else {
+        jobs.push({ id: jobId, createdAt: Date.now(), data, calc });
+      }
+      window.dispatchEvent(new Event('inventory:updated'));
+      reset();
+    } catch (error) {
+      window.alert(error.message);
     }
-    reset();
   });
 
   container.querySelector('#jobResetButton').addEventListener('click', reset);
@@ -289,7 +328,7 @@ export function renderJobsView(container) {
     if (deleteButton) {
       const job = jobs.find(item => item.id === deleteButton.dataset.delete);
       if (!job || !window.confirm(`¿Eliminar el trabajo "${job.data.nombre}"? Esta acción no se puede deshacer.`)) return;
-      jobs = jobs.filter(item => item.id !== job.id);
+      removeJobMaterial(job.id);\n      jobs = jobs.filter(item => item.id !== job.id);\n      window.dispatchEvent(new Event('inventory:updated'));
       if (editingId === job.id) reset();
       else refresh();
     }
