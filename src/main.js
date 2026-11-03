@@ -1,6 +1,7 @@
 import './styles/main.css';
 import { getFirebaseStatus } from './services/firebase.js';
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
+import { renderInventoryView } from './modules/inventario/inventory-view.js';
 
 const app = document.querySelector('#app');
 
@@ -38,6 +39,7 @@ app.innerHTML = `
       </header>
 
       <section id="jobs-root"></section>
+      <section id="inventory-root" hidden></section>
 
       <section class="connection-panel">
         <div>
@@ -60,21 +62,32 @@ document.querySelector('#firebase-indicator').className = `connection-indicator 
 
 
 const jobsRoot = document.querySelector('#jobs-root');
+const inventoryRoot = document.querySelector('#inventory-root');
 renderJobsView(jobsRoot);
+renderInventoryView(inventoryRoot);
 
 const navLinks = [...document.querySelectorAll('.nav-link')];
+function showSection(section, activeLink) {
+  const inventoryVisible = section === 'inventory';
+  jobsRoot.hidden = inventoryVisible;
+  inventoryRoot.hidden = !inventoryVisible;
+  navLinks.forEach(item => item.classList.toggle('active', item === activeLink));
+  document.querySelector('.topbar h1').textContent =
+    section === 'jobs' ? 'Trabajos' :
+    section === 'inventory' ? (activeLink?.getAttribute('href') === '#compras' ? 'Compras' : 'Inventario') :
+    'Panel principal';
+}
 navLinks.forEach(link => {
   link.addEventListener('click', event => {
-    if (link.getAttribute('href') === '#trabajos') {
+    const href = link.getAttribute('href');
+    if (['#trabajos', '#inicio', '#inventario', '#compras'].includes(href)) {
       event.preventDefault();
-      navLinks.forEach(item => item.classList.toggle('active', item === link));
-      document.querySelector('.topbar h1').textContent = 'Trabajos';
-      jobsRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (link.getAttribute('href') === '#inicio') {
+      showSection(href === '#inventario' || href === '#compras' ? 'inventory' : 'jobs', link);
+      window.location.hash = href.slice(1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
       event.preventDefault();
-      navLinks.forEach(item => item.classList.toggle('active', item === link));
-      document.querySelector('.topbar h1').textContent = 'Panel principal';
-      jobsRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.alert('Este módulo todavía está pendiente de migración.');
     }
   });
 });
