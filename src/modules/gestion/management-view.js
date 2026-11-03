@@ -12,7 +12,6 @@ const availableFor = productId => stockFor(productId).available;
 const getProduct = id => appState.products.find(p => p.id === id);
 const getJob = id => appState.jobs.find(j => j.id === id);
 const notify = message => { const node=document.querySelector('#management-message'); if(node){node.textContent=message;node.hidden=false;setTimeout(()=>node.hidden=true,2600);} };
-const moneyInput = value => Number(value || 0);
 
 let active = 'dashboard';
 
@@ -29,7 +28,7 @@ function shell(section) {
 
 function dashboard() {
   const totalJobs=appState.jobs.length, totalSales=appState.sales.reduce((n,s)=>n+Number(s.monto||0),0);
-  const pending=appState.consignments.reduce((n,c)=>n+Math.max(0,(Number(c.cantidad||0)-Number(c.cantidadDevuelta||0))*Number(c.precioUnitario||0)-Number(c.montoPagado||0)),0);
+  const pending=appState.consignments.reduce((n,c)=>n+consignmentBalance(c).pending,0);
   const sellable=appState.jobs.reduce((n,j)=>n+pieces(j),0);
   return `<div class="management-stats">
     <article><span>TRABAJOS</span><strong>${totalJobs}</strong></article>
@@ -110,7 +109,7 @@ function consignments() {
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
   root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
-    const jobs=jobIdsFor(p.id), total=jobs.reduce((n,j)=>n+pieces(j),0), sold=soldFor(p.id), cons=consignedFor(p.id), avail=availableFor(p.id);
+    const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
     return `<tr><td>${esc(p.codigo)}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
@@ -140,8 +139,8 @@ function renderConsignments(root) {
 }
 function renderConsignmentSummary(root) {
   const map=new Map();
-  appState.consignments.forEach(c=>{const n=Math.max(0,c.cantidad-(c.cantidadDevuelta||0));const balance=consignmentBalance(c);const row=map.get(c.tienda)||{pieces:0,due:0,paid:0,credit:0};row.pieces+=n;row.due+=balance.due;row.paid+=balance.paid;row.credit+=balance.credit;map.set(c.tienda,row);});
-  root.innerHTML=map.size?[...map].map(([name,r])=>`<div class="summary-row"><b>${esc(name)}</b><span>${r.pieces} piezas · pendiente ${money(Math.max(0,r.due-r.paid))}${r.credit>0?' · saldo a favor '+money(r.credit):''}</span></div>`).join(''):'<p class="management-empty">Sin entregas aún.</p>';
+  appState.consignments.forEach(c=>{const n=Math.max(0,c.cantidad-(c.cantidadDevuelta||0));const balance=consignmentBalance(c);const row=map.get(c.tienda)||{pieces:0,pending:0,credit:0};row.pieces+=n;row.pending+=balance.pending;row.credit+=balance.credit;map.set(c.tienda,row);});
+  root.innerHTML=map.size?[...map].map(([name,r])=>`<div class="summary-row"><b>${esc(name)}</b><span>${r.pieces} piezas · pendiente ${money(r.pending)}${r.credit>0?' · saldo a favor '+money(r.credit):''}</span></div>`).join(''):'<p class="management-empty">Sin entregas aún.</p>';
 }
 
 function attachBackup(root) {
@@ -164,7 +163,11 @@ function attachProducts(root) {
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]');
     if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
-    if(del){const id=del.dataset.productDelete;if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;appState.jobs.forEach(j=>{if(j.data.productoId===id)j.data.productoId=null;});appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
+    if(del){const id=del.dataset.productDelete;
+      if(appState.sales.some(s=>s.productoId===id)||appState.consignments.some(c=>c.productoId===id)){alert('No se puede eliminar un producto con ventas o consignaciones asociadas. Conserva el historial comercial.');return;}
+      if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;
+      appState.jobs.forEach(j=>{if(j.data.productoId===id)j.data.productoId=null;});
+      appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
   });
   root.querySelector('#product-assignments').addEventListener('change',e=>{
     const sel=e.target.closest('[data-job-product]');if(!sel)return;
@@ -222,7 +225,9 @@ function attachConsignments(root) {
   productSel.addEventListener('change',()=>{const p=getProduct(productSel.value);if(p)form.elements.productoLibre.value=p.codigo+' — '+p.nombre;});
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const product=getProduct(d.productoId);
-    const qty=positiveInteger(d.cantidad),price=Number(d.precioUnitario),paid=Number(d.montoPagado);
+    let qty;
+    try{qty=positiveInteger(d.cantidad);}catch(error){alert(error.message);return;}
+    const price=Number(d.precioUnitario),paid=Number(d.montoPagado);
     if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),notas:d.notas.trim(),createdAt:Date.now()});
