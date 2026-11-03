@@ -230,13 +230,14 @@ function attachConsignments(root) {
     const price=Number(d.precioUnitario),paid=Number(d.montoPagado);
     if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),notas:d.notas.trim(),createdAt:Date.now()});
+    const consignmentDate=d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now();
+    appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
   });
   root.querySelector('#consignments-table').addEventListener('click',e=>{
     const pay=e.target.closest('[data-cons-pay]'),ret=e.target.closest('[data-cons-return]'),del=e.target.closest('[data-cons-delete]');
     const c=appState.consignments.find(x=>x.id===(pay?.dataset.consPay||ret?.dataset.consReturn||del?.dataset.consDelete));if(!c)return;
-    if(pay){const balance=consignmentBalance(c);const value=prompt(`Monto pagado acumulado (valor de mercancía: ${money(balance.due)}):`,c.montoPagado||0);if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<0){alert('Monto de pago no válido.');return;}c.montoPagado=amount;c.estadoPago=amount===0?'Pendiente':amount>=balance.due?'Pagado':'Parcial';}
+    if(pay){const balance=consignmentBalance(c);const value=prompt(`¿Cuánto pagó ahora? Saldo pendiente: ${money(balance.pending)}`,'');if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<=0||amount>balance.pending){alert('El pago debe ser mayor a cero y no superar el saldo pendiente.');return;}if(!Array.isArray(c.pagos))c.pagos=[];c.pagos.push({monto:amount,fecha:Date.now(),metodoPago:'No especificado'});c.montoPagado=Number(c.montoPagado||0)+amount;c.estadoPago=c.montoPagado>=balance.due?'Pagado':'Parcial';}
     if(ret){const left=Math.max(0,c.cantidad-c.cantidadDevuelta);const value=prompt(`Cantidad devuelta sin vender (máximo ${left}):`,'1');if(value===null)return;const amount=Math.floor(Number(value));if(!Number.isInteger(amount)||amount<1||amount>left){alert('Cantidad devuelta no válida.');return;}c.cantidadDevuelta+=amount;const balance=consignmentBalance(c);c.estadoPago=c.montoPagado<=0?'Pendiente':c.montoPagado>=balance.due?'Pagado':'Parcial';}
     if(del){if(c.montoPagado>0&&!confirm('Esta consignación tiene pagos registrados. Al eliminarla se perderá ese historial de cobro. ¿Continuar?'))return;if(!c.montoPagado&&!confirm('¿Eliminar la consignación? Las piezas volverán a estar disponibles.'))return;appState.consignments=appState.consignments.filter(x=>x.id!==c.id);}
     saveAppState();renderManagementView(root,'consignments');notify('Consignación actualizada.');
@@ -279,7 +280,7 @@ function financeMovements(from,to) {
   appState.consignments.forEach(c=>{
     const payments=Array.isArray(c.pagos)?c.pagos:[];
     payments.forEach((p,i)=>{if(inRange(p.fecha))rows.push({id:c.id+'_p'+i,fecha:p.fecha,tipo:'Ingreso',categoria:'Consignación',concepto:'Pago · '+(c.tienda||'Tienda')+' · '+(c.productoNombre||''),metodo:p.metodoPago||'—',monto:Number(p.monto||0)});});
-    if(!payments.length&&Number(c.montoPagado||0)>0&&inRange(c.fecha))rows.push({id:c.id+'_legacy',fecha:c.fecha,tipo:'Ingreso',categoria:'Consignación',concepto:'Cobro histórico · '+(c.tienda||'Tienda'),metodo:'No especificado',monto:Number(c.montoPagado||0)});
+
   });
   appState.expenses.forEach(x=>{if(inRange(x.fecha))rows.push({id:x.id,fecha:x.fecha,tipo:'Egreso',categoria:x.categoria||'Otros',concepto:x.concepto,metodo:x.metodoPago||'—',monto:Number(x.monto||0)});});
   return rows.sort((a,b)=>Number(b.fecha)-Number(a.fecha));
