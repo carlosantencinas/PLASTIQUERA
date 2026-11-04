@@ -3,7 +3,7 @@ import { db } from './firebase.js';
 import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
 
-const sharedRef = db ? doc(db, 'talleres3dboys', 'principal') : null;
+const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
 const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements'];
 let baseline = null;
 let baselineReady = false;
