@@ -19,10 +19,10 @@ function shell(section) {
   const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas'};
   return `
   <section class="management-module">
-    <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>Registros relacionados con la producción, los clientes y la venta de productos.</p></div><span class="local-data-tag">Datos guardados en este navegador</span></div>
+    <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>Registros relacionados con la producción, los clientes y la venta de productos.</p></div><span class="local-data-tag">Datos guardados en Firebase</span></div>
     <div id="management-message" class="management-message" hidden role="status"></div>
     ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():section==='finance'?finance():consignments()}
-    <section class="backup-panel"><div><strong>Respaldo de datos</strong><p>Exporta periódicamente un archivo JSON. La importación reemplaza los datos locales actuales.</p></div><div class="backup-actions"><button type="button" class="management-button secondary" id="backup-export">Exportar respaldo</button><label class="management-button secondary file-button">Importar respaldo<input type="file" id="backup-import" accept=".json,application/json" hidden></label></div></section>
+    <section class="backup-panel"><div><strong>Respaldo de datos</strong><p>Exporta periódicamente un archivo JSON. La importación reemplaza los datos actuales de Firebase.</p></div><div class="backup-actions"><button type="button" class="management-button secondary" id="backup-export">Exportar respaldo</button><label class="management-button secondary file-button">Importar respaldo<input type="file" id="backup-import" accept=".json,application/json" hidden></label></div></section>
   </section>`;
 }
 
@@ -147,7 +147,7 @@ function attachBackup(root) {
   root.querySelector('#backup-export').addEventListener('click',exportBackup);
   root.querySelector('#backup-import').addEventListener('change',async e=>{
     const file=e.target.files?.[0]; if(!file)return;
-    if(!confirm('La importación reemplazará todos los datos locales actuales. ¿Continuar?')){e.target.value='';return;}
+    if(!confirm('La importación reemplazará todos los datos actuales de Plastiquería en Firebase. ¿Continuar?')){e.target.value='';return;}
     try{await importBackup(file);notify('Respaldo importado correctamente.');renderManagementView(root,active);}catch(error){alert(error.message);}
   });
 }
