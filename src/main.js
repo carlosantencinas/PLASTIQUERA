@@ -116,14 +116,14 @@ async function syncCloud() {
 async function initializeUserSession(user) {
   document.querySelector('#user-email').textContent=user.email||'Usuario autorizado';
   document.querySelector('#logout-button').hidden=false;
-  setStatus('Leyendo el documento compartido talleres3dboys/principal…','Conectando',false);
+  setStatus('Leyendo el documento exclusivo de Plastiquería…','Conectando',false);
   try {
     const remote=await readSharedState();
     const localHas=hasAppData();
     if(remote.hasRecords && !localHas) {
       replaceAppStateFromCloud(remote.data);
       cloudSyncEnabled=true;
-      setStatus('Datos cargados desde el documento compartido del taller.','Nube activa',true);
+      setStatus('Datos cargados desde Plastiquería en Firebase.','Nube activa',true);
     } else if(remote.hasRecords && localHas) {
       const useCloud=window.confirm('Hay datos tanto en este navegador como en Firebase.\n\nAceptar: cargar los datos compartidos de Firebase y reemplazar los datos locales actuales.\nCancelar: conservar los datos locales y elegir después si deseas subirlos.');
       if(useCloud) {
@@ -131,7 +131,7 @@ async function initializeUserSession(user) {
         cloudSyncEnabled=true;
         setStatus('Datos compartidos cargados desde Firebase.','Nube activa',true);
       } else {
-        const upload=window.confirm('¿Deseas subir los datos locales y reemplazar las listas compartidas de Firebase? Asegúrate de tener un respaldo de ambas fuentes.');
+        const upload=window.confirm('¿Deseas subir los datos locales y reemplazar las datos de Plastiquería en Firebase? Asegúrate de tener un respaldo de ambas fuentes.');
         if(upload) {
           cloudSyncEnabled=true;
           await syncCloud();
@@ -141,7 +141,7 @@ async function initializeUserSession(user) {
         }
       }
     } else if(localHas) {
-      const upload=window.confirm('El documento compartido no contiene registros. ¿Deseas subir los datos locales a Firebase?');
+      const upload=window.confirm('El documento de Plastiquería está vacío. ¿Deseas subir los datos locales a Firebase?');
       if(upload) {
         cloudSyncEnabled=true;
         const synced=await syncCloud();
