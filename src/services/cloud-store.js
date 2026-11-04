@@ -53,7 +53,7 @@ export async function writeSharedState() {
     const snapshot = await transaction.get(sharedRef);
     const current = snapshot.exists() ? snapshot.data() : {};
     if (signature(current, snapshot.exists()) !== baseline) {
-      throw new Error('CONFLICTO_NUBE: el documento cambió desde la última lectura. Se detuvo la sincronización para no sobrescribir cambios de otro usuario o de 3DBoys.');
+      throw new Error('CONFLICTO_NUBE: los datos cambiaron en Firebase desde la última lectura. Se detuvo el guardado para evitar sobrescribir cambios de otro dispositivo.');
     }
     transaction.set(sharedRef, payload, { merge: true });
   });
