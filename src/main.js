@@ -35,7 +35,7 @@ app.innerHTML = `
         <a class="nav-link" href="#consignaciones"><span>⇄</span> Consignaciones</a>
         <a class="nav-link" href="#finanzas"><span>▣</span> Finanzas</a>
       </nav>
-      <div class="sidebar-footer"><span class="status-dot"></span><span id="save-status">Almacenamiento local activo</span></div>
+      <div class="sidebar-footer"><span class="status-dot"></span><span id="save-status">Esperando conexión a Firebase</span></div>
     </aside>
     <main class="main-content">
       <header class="topbar">
