@@ -1,6 +1,6 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 
-const STORAGE_KEY = 'plastiqueria:data:v1';
+const STORAGE_KEY = 'plastiqueria:data:v2';
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [] };
 
 function restoreLegacyJobMovements() {
