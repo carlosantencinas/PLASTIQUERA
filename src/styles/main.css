@@ -347,3 +347,11 @@ h1,h2,h3 { color: #20283a; }
 .finance-positive{color:#07865f!important}
 .finance-negative{color:#d94b5b!important}
 @media(max-width:700px){.finance-toolbar{align-items:stretch;flex-direction:column}.finance-filters{min-width:0;grid-template-columns:1fr 1fr}}
+
+
+/* Etiquetas de códigos de barras del inventario */
+.inventory-heading-actions { display:flex; align-items:center; gap:10px; }
+.inventory-label-all { padding:8px 11px; border:1px solid #dce3ef; border-radius:7px; color:#53617a; background:#fff; font-size:10px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.inventory-label-all:hover { color:#087d5b; border-color:#b8e5d3; background:#f0fbf6; }
+.inventory-barcode-value { display:inline-block; padding:4px 6px; border-radius:4px; color:#344054; background:#f2f5f9; font:10px ui-monospace,monospace; }
+@media(max-width:600px) { .inventory-heading-actions { align-items:flex-end; flex-direction:column; gap:6px; } }
