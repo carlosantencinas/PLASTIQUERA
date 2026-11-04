@@ -10,7 +10,8 @@
     "test": "node --test"
   },
   "dependencies": {
-    "firebase": "^12.5.0"
+    "firebase": "^12.5.0",
+    "jsbarcode": "^3.11.6"
   },
   "devDependencies": {
     "vite": "^7.1.12"
