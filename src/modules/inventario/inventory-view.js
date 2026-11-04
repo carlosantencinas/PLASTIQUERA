@@ -1,4 +1,5 @@
 import { saveAppState } from '../../services/app-store.js';
+import JsBarcode from 'jsbarcode';
 import {
   UNIT_INFO,
   formatStock,
@@ -27,6 +28,48 @@ function dateInput(timestamp) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function barcodeValue(item) {
+  return 'PL' + String(item.id || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+function printBarcodeLabels(items) {
+  if (!items.length) {
+    window.alert('No hay materiales para etiquetar.');
+    return;
+  }
+  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  if (!printWindow) {
+    window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para esta página.');
+    return;
+  }
+  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas - Plastiquería</title>
+    <style>
+      @page { size: auto; margin: 8mm; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 0; font: 10px Arial, sans-serif; color: #111; }
+      .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+      .label { min-height: 32mm; border: 1px dashed #bbb; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; break-inside: avoid; text-align: center; }
+      .name { font-size: 11px; font-weight: bold; margin-bottom: 1mm; max-width: 100%; overflow-wrap: anywhere; }
+      .meta { font-size: 8px; color: #444; margin-top: 1mm; }
+      svg { max-width: 100%; height: auto; }
+      @media screen { body { padding: 12px; } .labels { max-width: 800px; margin: auto; } }
+    </style></head><body><div class="labels">${items.map((item, index) => `
+      <div class="label"><div class="name">${escapeText(item.nombre)}</div>
+      <svg id="barcode-${index}"></svg>
+      <div class="meta">${escapeText(item.categoria)} · ${escapeText(barcodeValue(item))}</div></div>`).join('')}</div></body></html>`);
+  printWindow.document.close();
+  items.forEach((item, index) => {
+    const svg = printWindow.document.getElementById('barcode-' + index);
+    try {
+      JsBarcode(svg, barcodeValue(item), { format: 'CODE128', displayValue: true, fontSize: 10, height: 42, margin: 2, width: 1.5 });
+    } catch (error) {
+      console.error('No se pudo generar el código de barras:', error);
+    }
+  });
+  printWindow.focus();
+  printWindow.setTimeout(() => printWindow.print(), 250);
+}
+
 function renderMaterials() {
   const materials = inventoryState.materials;
   if (!materials.length) {
@@ -34,7 +77,7 @@ function renderMaterials() {
   }
 
   return `<div class="inventory-table-wrap"><table class="inventory-table">
-    <thead><tr><th>Material</th><th>Categoría</th><th>Stock</th><th>Costo promedio</th><th>Valor en stock</th><th></th></tr></thead>
+    <thead><tr><th>Material</th><th>Categoría</th><th>Stock</th><th>Costo promedio</th><th>Valor en stock</th><th>Código</th><th></th></tr></thead>
     <tbody>${materials.map(item => {
       const lowLimit = item.unidad === 'g' || item.unidad === 'ml' ? 200 : 2;
       const low = item.stock < lowLimit;
@@ -45,7 +88,9 @@ function renderMaterials() {
         <td><span class="${low ? 'inventory-low' : ''}">${formatStock(item)}</span></td>
         <td>${money(formatUnitCost(item))}${unit}</td>
         <td>${money(stockValue(item))}</td>
+        <td><code class="inventory-barcode-value">${escapeText(barcodeValue(item))}</code></td>
         <td><div class="inventory-actions">
+          <button type="button" data-print-label="${item.id}">Etiqueta</button>
           <button type="button" data-adjust="${item.id}">Ajustar</button>
           <button type="button" class="danger" data-remove-material="${item.id}">Eliminar</button>
         </div></td>
@@ -134,9 +179,9 @@ export function renderInventoryView(container) {
         </form>
 
         <section class="inventory-card">
-          <div class="inventory-card-heading"><div><p class="eyebrow">EXISTENCIAS</p><h3>Inventario de materiales</h3></div><span id="inventoryMaterialCount">0</span></div>
+          <div class="inventory-card-heading"><div><p class="eyebrow">EXISTENCIAS</p><h3>Inventario de materiales</h3></div><div class="inventory-heading-actions"><button type="button" class="inventory-label-all" data-print-all>Imprimir etiquetas</button><span id="inventoryMaterialCount">0</span></div></div>
           <div id="inventoryMaterials"></div>
-          <p class="inventory-help">El costo promedio se expresa por gramo, mililitro o unidad base. Para filamento se muestra también el equivalente por kilogramo.</p>
+          <p class="inventory-help">El costo promedio se expresa por gramo, mililitro o unidad base. Para filamento se muestra también el equivalente por kilogramo. Cada material tiene un código Code 128 estable para imprimir y pegar su etiqueta.</p>
         </section>
       </div>
 
@@ -206,6 +251,12 @@ export function renderInventoryView(container) {
   });
 
   materialsRoot.addEventListener('click', event => {
+    const label = event.target.closest('[data-print-label]');
+    if (label) {
+      const material = inventoryState.materials.find(item => item.id === label.dataset.printLabel);
+      if (material) printBarcodeLabels([material]);
+      return;
+    }
     const adjust = event.target.closest('[data-adjust]');
     const remove = event.target.closest('[data-remove-material]');
     if (adjust) {
@@ -224,6 +275,8 @@ export function renderInventoryView(container) {
       catch (error) { window.alert(error.message); }
     }
   });
+
+  container.querySelector('[data-print-all]').addEventListener('click', () => printBarcodeLabels(inventoryState.materials));
 
   purchasesRoot.addEventListener('click', event => {
     const remove = event.target.closest('[data-remove-purchase]');
