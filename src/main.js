@@ -1,13 +1,12 @@
 import './styles/main.css';
 import { getFirebaseStatus, isFirebaseConfigured, auth } from './services/firebase.js';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { loadAppState, hasAppData, replaceAppStateFromCloud } from './services/app-store.js';
+import { replaceAppStateFromCloud } from './services/app-store.js';
 import { readSharedState, writeSharedState } from './services/cloud-store.js';
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
 
-loadAppState();
 const app = document.querySelector('#app');
 app.innerHTML = `
   <section id="auth-screen" class="auth-screen" hidden>
@@ -98,70 +97,50 @@ function mountModules() {
   navigate(location.hash||'#inicio');
 }
 async function syncCloud() {
-  cloudQueue=cloudQueue.then(()=>writeSharedState());
+  cloudQueue=cloudQueue.catch(()=>{}).then(()=>writeSharedState());
   try {
     await cloudQueue;
     const el=document.querySelector('#save-status');
-    if(el)el.textContent='Guardado local y sincronizado';
+    if(el)el.textContent='Guardado en Firebase';
+    setStatus('Todos los cambios están guardados en Firestore.','Nube activa',true);
     return true;
   } catch(error) {
     cloudSyncEnabled=false;
     console.error(error);
-    setStatus(error.message||'No se pudo sincronizar. Los datos locales se conservaron.','Conflicto / revisar',false);
+    setStatus(error.message||'No se pudo guardar en Firebase. Recarga para recuperar la última versión confirmada.','Conflicto / revisar',false);
     const el=document.querySelector('#save-status');
-    if(el)el.textContent='Guardado local · nube pendiente';
+    if(el)el.textContent='Error: no guardado en Firebase';
+    window.alert('No se pudo guardar en Firebase. No cierres ni recargues esta pestaña si necesitas recuperar los cambios que aún están en memoria.\n\n'+(error.message||'Error de sincronización'));
     return false;
   }
 }
 async function initializeUserSession(user) {
   document.querySelector('#user-email').textContent=user.email||'Usuario autorizado';
   document.querySelector('#logout-button').hidden=false;
-  setStatus('Leyendo el documento exclusivo de Plastiquería…','Conectando',false);
+  appShell.hidden=true;
+  authScreen.hidden=false;
+  document.querySelector('#login-error').textContent='';
+  document.querySelector('.auth-description').textContent='Conectando con los datos del taller en Firebase…';
   try {
     const remote=await readSharedState();
-    const localHas=hasAppData();
-    if(remote.hasRecords && !localHas) {
-      replaceAppStateFromCloud(remote.data);
-      cloudSyncEnabled=true;
-      setStatus('Datos cargados desde Plastiquería en Firebase.','Nube activa',true);
-    } else if(remote.hasRecords && localHas) {
-      const useCloud=window.confirm('Hay datos tanto en este navegador como en Firebase.\n\nAceptar: cargar los datos compartidos de Firebase y reemplazar los datos locales actuales.\nCancelar: conservar los datos locales y elegir después si deseas subirlos.');
-      if(useCloud) {
-        replaceAppStateFromCloud(remote.data);
-        cloudSyncEnabled=true;
-        setStatus('Datos compartidos cargados desde Firebase.','Nube activa',true);
-      } else {
-        const upload=window.confirm('¿Deseas subir los datos locales y reemplazar las datos de Plastiquería en Firebase? Asegúrate de tener un respaldo de ambas fuentes.');
-        if(upload) {
-          cloudSyncEnabled=true;
-          await syncCloud();
-        } else {
-          cloudSyncEnabled=false;
-          setStatus('Sesión iniciada. Se conservan los datos locales; sincronización desactivada para evitar sobrescrituras.','Modo local',false);
-        }
-      }
-    } else if(localHas) {
-      const upload=window.confirm('El documento de Plastiquería está vacío. ¿Deseas subir los datos locales a Firebase?');
-      if(upload) {
-        cloudSyncEnabled=true;
-        const synced=await syncCloud();
-        if(synced) setStatus('Datos locales enviados al documento compartido.','Nube activa',true);
-      } else {
-        cloudSyncEnabled=false;
-        setStatus('Sesión iniciada en modo local. No se modificó Firebase.','Modo local',false);
-      }
-    } else {
-      cloudSyncEnabled=true;
-      setStatus('Conectado. Los cambios se sincronizarán con el documento compartido.','Nube activa',true);
-    }
+    replaceAppStateFromCloud(remote.data);
+    cloudSyncEnabled=true;
+    setStatus(remote.exists
+      ? 'Datos cargados desde Firestore. Los cambios se guardarán en la nube.'
+      : 'Base de Plastiquería creada y vacía en Firestore. Los cambios se guardarán en la nube.',
+      'Nube activa',true);
+    mountModules();
+    appShell.hidden=false;
+    authScreen.hidden=true;
+    document.querySelector('.auth-description').textContent='Inicia sesión con la cuenta autorizada del taller.';
   } catch(error) {
     cloudSyncEnabled=false;
     console.error(error);
-    setStatus('No se pudo leer Firestore. Los datos locales siguen disponibles: '+(error.message||''),'Solo local',false);
+    document.querySelector('.auth-description').textContent='No se pudo conectar con la base de datos de Plastiquería.';
+    document.querySelector('#login-error').textContent=error.message||'Error al leer Firestore. Comprueba las reglas y vuelve a intentar.';
+    appShell.hidden=true;
+    authScreen.hidden=false;
   }
-  mountModules();
-  appShell.hidden=false;
-  authScreen.hidden=true;
 }
 document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',event=>{
   event.preventDefault();
@@ -172,10 +151,11 @@ document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('clic
 }));
 window.addEventListener('popstate',()=>navigate(location.hash));
 window.addEventListener('hashchange',()=>navigate(location.hash));
-window.addEventListener('plastiqueria:saved',event=>{
+window.addEventListener('plastiqueria:saved',()=>{
   const el=document.querySelector('#save-status');
-  if(el)el.textContent='Guardado local · '+new Date(event.detail.savedAt).toLocaleTimeString('es-BO',{hour:'2-digit',minute:'2-digit'});
+  if(el)el.textContent='Guardando en Firebase…';
   if(cloudSyncEnabled)syncCloud();
+  else if(el)el.textContent='Sin conexión a Firebase: cambio no guardado';
 });
 window.addEventListener('appstate:loaded',()=>{
   if(modulesMounted) {
@@ -216,11 +196,12 @@ if(isFirebaseConfigured) {
     }
   });
 } else {
-  authScreen.hidden=true;
-  appShell.hidden=false;
-  const status=getFirebaseStatus();
-  setStatus(status.message,'Almacenamiento local',false);
-  mountModules();
+  cloudSyncEnabled=false;
+  appShell.hidden=true;
+  authScreen.hidden=false;
+  document.querySelector('#login-form').hidden=true;
+  document.querySelector('.auth-description').textContent='Firebase es obligatorio para utilizar Plastiquería. Configura las credenciales de conexión para continuar.';
+  document.querySelector('#login-error').textContent=getFirebaseStatus().message;
 }
 
 if('serviceWorker' in navigator && import.meta.env.PROD) {
