@@ -1,6 +1,5 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 
-const STORAGE_KEY = 'plastiqueria:data:v2';
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [] };
 
 function restoreLegacyJobMovements() {
@@ -47,53 +46,24 @@ export function replaceAppStateFromCloud(data = {}) {
 
 
 export function loadAppState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
-    appState.products = Array.isArray(data.products) ? data.products : (Array.isArray(data.productos) ? data.productos : []);
-    appState.clients = Array.isArray(data.clients) ? data.clients : (Array.isArray(data.clientes) ? data.clientes : []);
-    appState.sales = Array.isArray(data.sales) ? data.sales : [];
-    appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
-    appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
-    loadInventorySnapshot({
-      materials: data.materials || [],
-      purchases: data.purchases || [],
-      jobMovements: data.jobMovements || [],
-    });
-    normalizeConsignments();
-    restoreLegacyJobMovements();
-    return true;
-  } catch (error) {
-    console.error('No se pudo leer el almacenamiento local de Plastiquería', error);
-    return false;
-  }
+  // Plastiquería no lee datos persistentes del navegador.
+  // El estado se inicializa vacío y se carga exclusivamente desde Firestore al autenticar.
+  appState.jobs.splice(0, appState.jobs.length);
+  appState.products = [];
+  appState.clients = [];
+  appState.sales = [];
+  appState.consignments = [];
+  appState.expenses = [];
+  loadInventorySnapshot({ materials: [], purchases: [], jobMovements: [] });
+  return false;
 }
 
 export function saveAppState({ dispatch = true } = {}) {
-  const data = {
-    schemaVersion: 1,
-    savedAt: new Date().toISOString(),
-    jobs: appState.jobs,
-    products: appState.products,
-    clients: appState.clients,
-    sales: appState.sales,
-    consignments: appState.consignments,
-    expenses: appState.expenses,
-    materials: inventoryState.materials,
-    purchases: inventoryState.purchases,
-    jobMovements: inventoryState.jobMovements,
-  };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    if (dispatch) window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt: data.savedAt } }));
-    return true;
-  } catch (error) {
-    console.error('No se pudieron guardar los datos', error);
-    window.alert('No se pudieron guardar los datos en este navegador. Exporta un respaldo y libera espacio.');
-    return false;
-  }
+  // El guardado persistente se realiza exclusivamente en Firestore.
+  // Esta función solo notifica a la capa de sincronización que el estado en memoria cambió.
+  const savedAt = new Date().toISOString();
+  if (dispatch) window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt } }));
+  return true;
 }
 
 export function exportBackup() {
