@@ -21,6 +21,7 @@ const fields = [
 ];
 
 const printerOptions = [
+  ['Anycubic Kobra X (FDM multicolor)', 'Anycubic Kobra X (FDM multicolor)', '475'],
   ['', 'Seleccionar tipo', ''],
   ['Creality Ender 3 / Ender 3 V2 (FDM)', 'Creality Ender 3 / Ender 3 V2 (FDM)', '220'],
   ['Creality Ender 3 S1 / Neo (FDM)', 'Creality Ender 3 S1 / Neo (FDM)', '350'],
@@ -183,8 +184,9 @@ export function renderJobsView(container) {
             ${input('horasImp','Horas de impresión','number','4')}
             ${input('minImp','Minutos de impresión','number','30','max="59"')}
             <label class="job-field job-span-2"><span>Tipo de impresora</span><select name="tipoImpresora">${printerOptions.map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></label>
-            ${input('watts','Potencia (W)','number','220')}
+            ${input('watts','Potencia de cálculo (W)','number','475')}
             ${input('precioKwh','Energía (Bs/kWh)','number','0.7')}
+            <p class="job-help job-span-2">Kobra X: potencia nominal de referencia 475 W a 220 V. El consumo real varía según la temperatura de cama y boquilla, el material y la fase de impresión. Ajusta los W si dispones de una medición con vatímetro.</p>
             ${input('mantenimiento','Mantenimiento (Bs/hora)','number','1.5')}
           </div>
           <div class="jobs-subheading">Mano de obra y otros costos</div>
@@ -275,6 +277,8 @@ export function renderJobsView(container) {
     form.reset();
     form.elements.fecha.value = dateInput(Date.now());
     form.elements.precioKwh.value = '0.7';
+    form.elements.tipoImpresora.value = 'Anycubic Kobra X (FDM multicolor)';
+    form.elements.watts.value = '475';
     container.querySelector('#jobFormTitle').textContent = 'Nuevo trabajo';
     container.querySelector('#jobSaveButton').textContent = 'Guardar trabajo';
     refresh();
