@@ -5,8 +5,7 @@ import { inventoryState } from './inventory-store.js';
 
 const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
 const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements'];
-let baseline = null;
-let baselineReady = false;
+let initialReadCompleted = false;
 
 function normalized(data = {}) {
   return {
@@ -21,14 +20,12 @@ function normalized(data = {}) {
     jobMovements: Array.isArray(data.jobMovements) ? data.jobMovements : [],
   };
 }
-function signature(data, exists) { return JSON.stringify({ exists, ...normalized(data) }); }
 
 export async function readSharedState() {
   if (!sharedRef) throw new Error('Firebase no está configurado.');
   const snapshot = await getDoc(sharedRef);
   const raw = snapshot.exists() ? snapshot.data() : {};
-  baseline = signature(raw, snapshot.exists());
-  baselineReady = true;
+  initialReadCompleted = true;
   const data = normalized(raw);
   return {
     exists: snapshot.exists(),
@@ -41,22 +38,20 @@ export async function readSharedState() {
     },
   };
 }
+
 export async function writeSharedState() {
   if (!sharedRef) throw new Error('Firebase no está configurado.');
-  if (!baselineReady) throw new Error('Primero debes leer el documento compartido de Firebase.');
+  if (!initialReadCompleted) throw new Error('Primero debes leer el documento compartido de Firebase.');
   const payload = {
     jobs: appState.jobs, materials: inventoryState.materials, purchases: inventoryState.purchases,
     sales: appState.sales, productos: appState.products, clientes: appState.clients,
     consignaciones: appState.consignments, expenses: appState.expenses, jobMovements: inventoryState.jobMovements,
   };
   await runTransaction(db, async transaction => {
-    const snapshot = await transaction.get(sharedRef);
-    const current = snapshot.exists() ? snapshot.data() : {};
-    if (signature(current, snapshot.exists()) !== baseline) {
-      throw new Error('CONFLICTO_NUBE: los datos cambiaron en Firebase desde la última lectura. Se detuvo el guardado para evitar sobrescribir cambios de otro dispositivo.');
-    }
+    await transaction.get(sharedRef);
+    // Se elimina la comparación con una copia antigua que generaba falsos conflictos.
+    // La última sesión que guarde prevalece si hay ediciones simultáneas.
     transaction.set(sharedRef, payload, { merge: true });
   });
-  baseline = signature(payload, true);
   return true;
 }
