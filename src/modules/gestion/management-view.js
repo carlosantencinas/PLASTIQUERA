@@ -157,7 +157,7 @@ function attachProducts(root) {
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=d.codigo.trim();
     if(appState.products.some(p=>p.codigo.toLowerCase()===code.toLowerCase()&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
     if(d.id){Object.assign(getProduct(d.id),{codigo:code,nombre:d.nombre.trim(),notas:d.notas.trim()});}
-    else appState.products.push({id:makeId('prod'),codigo,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
+    else appState.products.push({id:makeId('prod'),codigo:code,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
