@@ -105,9 +105,9 @@ async function syncCloud() {
     setStatus('Todos los cambios están guardados en Firestore.','Nube activa',true);
     return true;
   } catch(error) {
-    cloudSyncEnabled=false;
+    // Mantener la sincronización habilitada permite reintentar en el siguiente cambio.
     console.error(error);
-    setStatus(error.message||'No se pudo guardar en Firebase. Recarga para recuperar la última versión confirmada.','Conflicto / revisar',false);
+    setStatus(error.message||'No se pudo guardar en Firebase. Se volverá a intentar al próximo cambio.','Error de guardado',false);
     const el=document.querySelector('#save-status');
     if(el)el.textContent='Error: no guardado en Firebase';
     window.alert('No se pudo guardar en Firebase. No cierres ni recargues esta pestaña si necesitas recuperar los cambios que aún están en memoria.\n\n'+(error.message||'Error de sincronización'));
