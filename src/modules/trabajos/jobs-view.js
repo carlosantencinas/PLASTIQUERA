@@ -1,4 +1,5 @@
 import { calculateJob } from '../../calculations/jobs.js';
+import JsBarcode from 'jsbarcode';
 import { appState, saveAppState } from '../../services/app-store.js';
 import { inventoryState, getMaterialById, applyJobMaterial, removeJobMaterial } from '../../services/inventory-store.js';
 
@@ -115,13 +116,63 @@ function renderPreview(data, calc) {
   `;
 }
 
+function printProductionLabels(selectedJobs) {
+  const labels = selectedJobs.flatMap(job => {
+    const quantity = Math.max(0, Number(job.data.piezasVendibles ?? job.data.piezas ?? 1));
+    return Array.from({ length: quantity }, (_, index) => ({
+      job,
+      piece: index + 1,
+      quantity,
+      code: 'PLJ' + String(job.id || '').replace(/[^a-z0-9]/gi, '').toUpperCase() + 'P' + String(index + 1).padStart(3, '0'),
+    }));
+  });
+  if (!labels.length) {
+    window.alert('No hay piezas vendibles para generar etiquetas de producción.');
+    return;
+  }
+  const popup = window.open('', '_blank', 'width=900,height=700');
+  if (!popup) {
+    window.alert('El navegador bloqueó la ventana de etiquetas. Permite las ventanas emergentes para este sitio.');
+    return;
+  }
+  popup.document.open();
+  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas de producción - Plastiquería</title>
+    <style>
+      @page { size:auto; margin:8mm; }
+      * { box-sizing:border-box; }
+      body { margin:0; padding:0; color:#111; font:10px Arial,sans-serif; }
+      .labels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5mm; }
+      .label { min-height:34mm; padding:3mm; border:1px dashed #aaa; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; break-inside:avoid; }
+      .name { max-width:100%; margin-bottom:1mm; font-size:11px; font-weight:bold; overflow-wrap:anywhere; }
+      .client,.piece,.code { margin-top:1mm; font-size:8px; color:#333; }
+      svg { max-width:100%; height:auto; }
+      @media screen { body { padding:12px; } .labels { max-width:800px; margin:auto; } }
+    </style></head><body><div class="labels">${labels.map((item,index) => `
+      <div class="label"><div class="name">${escapeText(item.job.data.nombre)}</div>
+      <svg id="production-barcode-${index}"></svg>
+      <div class="client">${escapeText(item.job.data.cliente || 'Producción Plastiquería')}</div>
+      <div class="piece">Pieza ${item.piece} de ${item.quantity}</div>
+      <div class="code">${escapeText(item.code)}</div></div>`).join('')}</div></body></html>`);
+  popup.document.close();
+  labels.forEach((item,index) => {
+    const svg = popup.document.getElementById('production-barcode-' + index);
+    try {
+      JsBarcode(svg, item.code, { format:'CODE128', displayValue:true, fontSize:9, height:38, margin:2, width:1.35 });
+    } catch (error) {
+      console.error('No se pudo generar la etiqueta de producción:', error);
+    }
+  });
+  popup.focus();
+  popup.setTimeout(() => popup.print(), 250);
+}
+
 function renderHistory() {
   if (!jobs.length) {
     return '<div class="job-empty"><strong>Aún no hay trabajos</strong><span>Completa el formulario para registrar el primero.</span></div>';
   }
   return `
     <div class="job-table-scroll"><table class="job-table">
-      <thead><tr><th>Trabajo</th><th>Fecha</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr></thead>
+      <thead><tr><th>Trabajo</th><th>Fecha</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th>Etiquetas</th><th></th></tr></thead>
       <tbody>${[...jobs].sort((a,b) => b.data.fecha - a.data.fecha).map(job => `
         <tr>
           <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
@@ -261,7 +312,7 @@ export function renderJobsView(container) {
             <button class="job-reset" type="submit" data-action="quote">Guardar y cotizar</button>
             <button class="job-reset" type="button" id="jobResetButton">Limpiar</button>
           </div>
-          <p class="job-help">Los cambios se guardan automáticamente en este navegador. Exporta respaldos periódicos desde el panel de gestión.</p>
+          <p class="job-help">Los trabajos y sus consumos se guardan automáticamente en la nube (Firestore).</p>
         </form>
         <section class="jobs-card jobs-preview-card">
           <div class="jobs-card-heading"><div><p class="eyebrow">ANÁLISIS DE COSTOS</p><h3>Vista previa</h3></div><span class="jobs-step">02</span></div>
@@ -269,7 +320,7 @@ export function renderJobsView(container) {
         </section>
       </div>
       <section class="jobs-card jobs-history-card">
-        <div class="jobs-card-heading"><div><p class="eyebrow">HISTORIAL</p><h3>Trabajos registrados</h3></div><span class="jobs-count" id="jobsCount">0 registros</span></div>
+        <div class="jobs-card-heading"><div><p class="eyebrow">HISTORIAL</p><h3>Trabajos registrados</h3></div><div class="jobs-history-actions"><button type="button" class="job-action" data-print-production-all>Etiquetas de toda la producción</button><span class="jobs-count" id="jobsCount">0 registros</span></div></div>
         <div id="jobHistory"></div>
       </section>
     </section>
@@ -389,8 +440,15 @@ export function renderJobsView(container) {
 
   history.addEventListener('click', event => {
     const quoteButton = event.target.closest('[data-quote]');
+    const productionLabel = event.target.closest('[data-production-label]');
+    const printAllLabels = event.target.closest('[data-print-production-all]');
     const editButton = event.target.closest('[data-edit]');
     const deleteButton = event.target.closest('[data-delete]');
+    if (productionLabel) {
+      const job = jobs.find(item => item.id === productionLabel.dataset.productionLabel);
+      if (job) printProductionLabels([job]);
+    }
+    if (printAllLabels) printProductionLabels(jobs);
     if (quoteButton) {
       const job = jobs.find(item => item.id === quoteButton.dataset.quote);
       if (job) openQuote(job);
