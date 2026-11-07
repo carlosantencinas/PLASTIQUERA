@@ -125,8 +125,30 @@ h1 { margin: 0; font-size: 25px; letter-spacing: -.7px; }
 .job-action { padding:6px 8px; border:1px solid var(--line); border-radius:5px; color:#aab6c8; background:transparent; font-size:9px; cursor:pointer; }
 .job-action:hover { border-color:var(--accent); color:var(--accent); }
 .job-action.danger:hover { border-color:#e8595a; color:#e8595a; }
-@media(max-width:1050px) { .jobs-layout { grid-template-columns:1fr; } .jobs-preview-card { order:-1; } }
-@media(max-width:650px) { .jobs-intro { align-items:start; flex-direction:column; } .jobs-stats { grid-template-columns:1fr; } .jobs-card { padding:16px; } .jobs-form-grid { gap:10px; } .job-field input,.job-field select,.job-field textarea { font-size:16px; } }
+@media(min-width:1051px) {
+  .jobs-preview-card {
+    position:sticky;
+    top:20px;
+    align-self:start;
+    max-height:calc(100vh - 40px);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+  }
+}
+@media(max-width:1050px) { .jobs-layout { grid-template-columns:1fr; } .jobs-preview-card { order:-1; position:static; max-height:none; overflow:visible; } }
+@media(max-width:650px) {
+  .jobs-intro { align-items:start; flex-direction:column; }
+  .jobs-stats { grid-template-columns:1fr; }
+  .jobs-card { padding:16px; }
+  .jobs-form-grid { gap:10px; }
+  .job-field input,.job-field select,.job-field textarea { font-size:16px; }
+  .jobs-preview-card .job-price-preview { padding:14px 8px; border:0; }
+  .jobs-preview-card .job-price-preview small,
+  .jobs-preview-card .job-bar,
+  .jobs-preview-card .job-breakdown,
+  .jobs-preview-card .job-note { display:none; }
+  .jobs-preview-card .job-price-preview strong { font-size:30px; }
+}
 
 
 /* Inventario y compras */
