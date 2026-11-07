@@ -130,6 +130,7 @@ function renderHistory() {
           <td class="job-highlight">${money(job.calc.precioVenta)}</td>
           <td>${money(job.calc.ganancia)}</td>
           <td><div class="job-actions">
+            <button type="button" data-quote="${job.id}" class="job-action">Cotización</button>
             <button type="button" data-edit="${job.id}" class="job-action">Editar</button>
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
@@ -148,6 +149,59 @@ function escapeText(value) {
 function dateInput(ts) {
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function openQuote(job) {
+  const { data, calc } = job;
+  const popup = window.open('', '_blank', 'width=850,height=700');
+  if (!popup) {
+    window.alert('El navegador bloqueó la ventana de cotización. Permite las ventanas emergentes para este sitio e inténtalo nuevamente.');
+    return;
+  }
+  const quantity = Math.max(0, Number(data.piezasVendibles ?? 1));
+  const unitPrice = quantity > 1 ? calc.precioUnitario : calc.precioVenta;
+  const date = new Date(data.fecha || Date.now()).toLocaleDateString('es-BO');
+  const reference = `COT-${new Date(data.fecha || Date.now()).getFullYear()}-${String(job.id).slice(-6).toUpperCase()}`;
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cotización ${escapeText(data.nombre)}</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;padding:42px;color:#20283a;background:#fff;font:14px Arial,sans-serif}
+  .sheet{max-width:760px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:24px;padding-bottom:22px;border-bottom:3px solid #ff6b35}
+  .brand{font-size:24px;font-weight:800;letter-spacing:-.7px}.brand span{color:#ff6b35}.muted{color:#68758c}
+  h1{margin:28px 0 6px;font-size:28px}.meta{display:flex;justify-content:space-between;gap:20px;margin:22px 0}
+  .box{padding:15px 17px;border:1px solid #e5eaf3;border-radius:8px;min-width:0;flex:1}.box small{display:block;margin-bottom:7px;color:#68758c;text-transform:uppercase;font-size:10px;letter-spacing:.7px}
+  .box strong{font-size:14px}.description{margin:24px 0;color:#46536a;line-height:1.6;white-space:pre-wrap}
+  table{width:100%;border-collapse:collapse;margin-top:26px}th{padding:12px;text-align:left;background:#f3f6fc;color:#68758c;font-size:11px;text-transform:uppercase}
+  td{padding:15px 12px;border-bottom:1px solid #e5eaf3;vertical-align:top}th:last-child,td:last-child{text-align:right;white-space:nowrap}
+  .item-title{font-weight:700}.total{display:flex;justify-content:flex-end;margin-top:18px}.total div{width:260px;padding:17px;background:#fff4ed;border-radius:8px}
+  .total span{display:block;color:#68758c;font-size:11px}.total strong{display:block;margin-top:6px;color:#e95a27;font-size:25px}
+  .thanks{margin-top:48px;padding-top:17px;border-top:1px solid #e5eaf3;text-align:center;color:#68758c;font-size:12px}
+  .toolbar{max-width:760px;margin:0 auto 22px;display:flex;justify-content:flex-end;gap:8px}
+  .toolbar button{padding:10px 16px;border:0;border-radius:6px;background:#ff6b35;color:#fff;font-weight:700;cursor:pointer}
+  .toolbar button:last-child{background:#edf1f7;color:#46536a}
+  @media print{body{padding:0}.toolbar{display:none}.sheet{max-width:none}.box,.total div{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+  @page{size:A4;margin:18mm}
+</style>
+</head>
+<body>
+<div class="toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button><button onclick="window.close()">Cerrar</button></div>
+<main class="sheet">
+  <header class="top"><div><div class="brand">PLASTI<span>QUERÍA</span></div><div class="muted">Impresión 3D · Cotización</div></div><div style="text-align:right"><strong>${reference}</strong><div class="muted" style="margin-top:7px">${date}</div></div></header>
+  <h1>Cotización</h1><p class="muted">Propuesta económica para el trabajo solicitado.</p>
+  <section class="meta"><div class="box"><small>Cliente</small><strong>${escapeText(data.cliente || 'Cliente')}</strong></div><div class="box"><small>Trabajo</small><strong>${escapeText(data.nombre)}</strong></div></section>
+  ${data.descripcion ? `<p class="description">${escapeText(data.descripcion)}</p>` : ''}
+  <table><thead><tr><th>Detalle</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
+  <tbody><tr><td><div class="item-title">${escapeText(data.nombre)}</div>${data.descripcion ? `<div class="muted" style="margin-top:5px">${escapeText(data.descripcion)}</div>` : ''}</td><td>${quantity}</td><td>${money(unitPrice)}</td><td>${money(calc.precioVenta)}</td></tr></tbody></table>
+  <div class="total"><div><span>TOTAL DE LA COTIZACIÓN</span><strong>${money(calc.precioVenta)}</strong></div></div>
+  <footer class="thanks">Gracias por considerar a PLASTIQUERÍA para su proyecto.</footer>
+</main>
+</body></html>`);
+  popup.document.close();
 }
 
 export function renderJobsView(container) {
@@ -204,6 +258,7 @@ export function renderJobsView(container) {
           </div>
           <div class="jobs-form-actions">
             <button class="job-save" type="submit" id="jobSaveButton">Guardar trabajo</button>
+            <button class="job-reset" type="submit" data-action="quote">Guardar y cotizar</button>
             <button class="job-reset" type="button" id="jobResetButton">Limpiar</button>
           </div>
           <p class="job-help">Los cambios se guardan automáticamente en este navegador. Exporta respaldos periódicos desde el panel de gestión.</p>
@@ -295,6 +350,7 @@ export function renderJobsView(container) {
 
   form.addEventListener('submit', event => {
     event.preventDefault();
+    const makeQuote = event.submitter?.dataset.action === 'quote';
     const { data } = values();
     if (!data.nombre) return;
     if (editingId) {
@@ -321,7 +377,9 @@ export function renderJobsView(container) {
       }
       saveAppState();
       window.dispatchEvent(new Event('inventory:updated'));
+      const savedJob = { id: jobId, data: { ...data }, calc };
       reset();
+      if (makeQuote) openQuote(savedJob);
     } catch (error) {
       window.alert(error.message);
     }
@@ -330,8 +388,13 @@ export function renderJobsView(container) {
   container.querySelector('#jobResetButton').addEventListener('click', reset);
 
   history.addEventListener('click', event => {
+    const quoteButton = event.target.closest('[data-quote]');
     const editButton = event.target.closest('[data-edit]');
     const deleteButton = event.target.closest('[data-delete]');
+    if (quoteButton) {
+      const job = jobs.find(item => item.id === quoteButton.dataset.quote);
+      if (job) openQuote(job);
+    }
     if (editButton) {
       const job = jobs.find(item => item.id === editButton.dataset.edit);
       if (!job) return;
