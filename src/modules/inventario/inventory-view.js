@@ -142,7 +142,7 @@ export function renderInventoryView(container) {
       <div class="inventory-intro">
         <div><p class="eyebrow">ALMACÉN Y ABASTECIMIENTO</p><h2>Inventario y compras</h2>
         <p>Control de materiales consumibles, equipos, existencias y costo promedio ponderado.</p></div>
-        <span class="inventory-local-tag">Datos locales · sin sincronización</span>
+        <span class="inventory-local-tag">Sincronización automática · Firestore</span>
       </div>
 
       <div class="inventory-stats" id="inventoryStats"></div>
@@ -169,13 +169,13 @@ export function renderInventoryView(container) {
               </select>
             </label>
             <label class="inventory-field"><span>Precio total pagado (Bs) *</span><input name="totalPrice" type="number" min="0.01" step="any" required placeholder="95"></label>
-            <label class="inventory-field"><span>Comprado por</span><input name="purchasedBy" placeholder="Nombre"></label>
-            <label class="inventory-field"><span>Proveedor</span><input name="supplier" placeholder="Nombre del proveedor"></label>
+            <label class="inventory-field"><span>Comprado por</span><input name="purchasedBy" list="inventoryPurchasedByOptions" autocomplete="off" placeholder="Seleccionar o escribir nombre"><datalist id="inventoryPurchasedByOptions"></datalist></label>
+            <label class="inventory-field"><span>Proveedor</span><input name="supplier" list="inventorySupplierOptions" autocomplete="off" placeholder="Seleccionar o escribir proveedor"><datalist id="inventorySupplierOptions"></datalist></label>
             <label class="inventory-field"><span>Fecha</span><input name="date" type="date" required></label>
             <label class="inventory-field inventory-span-2"><span>Notas</span><textarea name="notes" rows="2" placeholder="Detalles de la compra"></textarea></label>
           </div>
           <button class="inventory-primary" type="submit">Guardar compra</button>
-          <p class="inventory-help">Los equipos quedan en el historial de compras, pero no incrementan el stock consumible.</p>
+          <p class="inventory-help">Los equipos quedan en el historial de compras, pero no incrementan el stock consumible. Las compras, existencias y movimientos se guardan en Firestore al registrar cada cambio.</p>
         </form>
 
         <section class="inventory-card">
@@ -221,6 +221,10 @@ export function renderInventoryView(container) {
 
     const names = [...new Set(inventoryState.materials.map(item => item.nombre))];
     container.querySelector('#inventoryMaterialNames').innerHTML = names.map(name => `<option value="${escapeText(name)}"></option>`).join('');
+    const suppliers = [...new Set(inventoryState.purchases.map(item => String(item.proveedor || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es'));
+    const purchasers = [...new Set(inventoryState.purchases.map(item => String(item.compradoPor || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es'));
+    container.querySelector('#inventorySupplierOptions').innerHTML = suppliers.map(name => `<option value="${escapeText(name)}"></option>`).join('');
+    container.querySelector('#inventoryPurchasedByOptions').innerHTML = purchasers.map(name => `<option value="${escapeText(name)}"></option>`).join('');
   }
 
   window.addEventListener('appstate:loaded', refresh);
