@@ -377,3 +377,177 @@ h1,h2,h3 { color: #20283a; }
 .inventory-label-all:hover { color:#087d5b; border-color:#b8e5d3; background:#f0fbf6; }
 .inventory-barcode-value { display:inline-block; padding:4px 6px; border-radius:4px; color:#344054; background:#f2f5f9; font:10px ui-monospace,monospace; }
 @media(max-width:600px) { .inventory-heading-actions { align-items:flex-end; flex-direction:column; gap:6px; } }
+
+
+/* Refuerzo visual: colores intensos, contraste y tipografía legible */
+:root {
+  font-size: 16px;
+  --accent: #f4511e;
+  --accent-soft: #fff0e8;
+  --surface: #ffffff;
+  --surface-2: #f2f5fb;
+  --muted: #53627a;
+  --line: #d8e0ed;
+}
+body {
+  color: #172238;
+  background: #f3f6fc;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+h1 { font-size: 28px; font-weight: 700; letter-spacing: -.55px; }
+h2 { font-weight: 700; }
+h3 { font-weight: 700; }
+.eyebrow,.nav-caption {
+  color: #596982;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.25px;
+}
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #dce4f0;
+}
+.brand { font-size: 22px; }
+.brand-mark {
+  background: linear-gradient(135deg,#f4511e,#ff8a00);
+  box-shadow: 0 5px 14px #f4511e45;
+}
+.nav-link {
+  min-height: 46px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #34435b;
+}
+.nav-link span { font-size: 18px; }
+.nav-link:nth-child(1) span { color:#6538d4; background:#e9e1ff; }
+.nav-link:nth-child(2) span { color:#d94312; background:#ffe1d4; }
+.nav-link:nth-child(3) span { color:#087eae; background:#d9f2ff; }
+.nav-link:nth-child(4) span { color:#087b58; background:#d8f6e9; }
+.nav-link:nth-child(5) span { color:#a36d00; background:#fff0bd; }
+.nav-link:nth-child(6) span { color:#c92e60; background:#ffdfeb; }
+.nav-link:nth-child(7) span { color:#245fbd; background:#dce9ff; }
+.nav-link:nth-child(8) span { color:#873bb0; background:#f0dcff; }
+.main-content { padding-top: 38px; }
+.user-chip { font-size: 14px; }
+.welcome {
+  border-color: #ffc9ad;
+  background: linear-gradient(112deg,#ffe4d5 0%,#e6f3ff 55%,#eee5ff 120%);
+}
+.welcome .eyebrow { color:#c43c10; }
+.welcome h2 { font-size: clamp(26px,3vw,36px); }
+.welcome p:last-child { color:#3f4e66; font-size:15px; line-height:1.65; }
+.section-heading h2,.connection-panel h2 { font-size:21px; }
+.module-card { border-color:#dce4f0; }
+.module-card h3 { font-size:16px; }
+.module-card p { color:#4f5e75; font-size:13px; line-height:1.6; }
+.module-state { font-size:11px; font-weight:700; }
+.connection-panel p:last-child { color:#4f5e75; font-size:13px; }
+.connection-indicator { font-size:12px; font-weight:700; }
+.page-footer { font-size:12px; }
+.jobs-intro h2,.inventory-intro h2,.management-heading h2 { font-size:27px; }
+.jobs-intro p:last-child,.inventory-intro p:not(.eyebrow),.management-heading p:last-child {
+  color:#4f5e75;
+  font-size:14px;
+  line-height:1.55;
+}
+.jobs-card-heading h3,.inventory-card-heading h3,.management-card h3 { font-size:18px; }
+.jobs-stats article span,.inventory-stats article span,.management-stats article span {
+  color:#52617a;
+  font-size:11px;
+  letter-spacing:.7px;
+}
+.jobs-stats article strong,.inventory-stats article strong,.management-stats article strong {
+  font-size:22px;
+  color:#172238;
+}
+.job-field,.inventory-field,.management-field,.auth-card label {
+  color:#34435b;
+  font-size:13px;
+  font-weight:600;
+}
+.job-field input,.job-field select,.job-field textarea,
+.inventory-field input,.inventory-field select,.inventory-field textarea,
+.management-field input,.management-field select,.management-field textarea,
+.management-search,.assignment-row select {
+  font-size:14px;
+  color:#172238;
+  background:#fff;
+  border-color:#cbd6e6;
+}
+.job-field input,.job-field select,.inventory-field input,.inventory-field select,
+.management-field input,.management-field select { min-height:43px; }
+.job-field input:focus,.job-field select:focus,.job-field textarea:focus,
+.inventory-field input:focus,.inventory-field select:focus,.inventory-field textarea:focus,
+.management-field input:focus,.management-field select:focus,.management-field textarea:focus,
+.management-search:focus {
+  border-color:#6941d9;
+  box-shadow:0 0 0 3px #6941d925;
+}
+.job-save,.job-reset,.inventory-primary,.management-button {
+  min-height:43px;
+  font-size:13px;
+  font-weight:800;
+}
+.job-save,.inventory-primary,.management-button {
+  background:linear-gradient(135deg,#f4511e,#e91e63);
+  box-shadow:0 5px 13px #e94c302b;
+}
+.jobs-subheading { color:#d84315; font-size:12px; }
+.job-price-preview span { color:#46556d; font-size:11px; font-weight:800; }
+.job-price-preview strong { color:#e84318; }
+.job-price-preview small { color:#53627a; font-size:12px; }
+.job-breakdown div { font-size:12px; color:#34435b; }
+.job-breakdown div span { color:#34435b; }
+.job-breakdown div b { font-size:12px; color:#172238; }
+.job-table,.inventory-table,.management-table { font-size:13px; }
+.job-table th,.inventory-table th,.management-table th {
+  color:#46556d;
+  font-size:11px;
+  font-weight:800;
+}
+.job-table td,.inventory-table td,.management-table td {
+  color:#34435b;
+  border-color:#e2e8f1;
+}
+.job-table td strong,.inventory-table td strong,.management-table td b { color:#172238; }
+.job-table td small,.management-table td small { color:#596982; }
+.job-action,.inventory-actions button,.inventory-icon-danger,.management-link {
+  font-size:12px;
+  font-weight:700;
+}
+.jobs-local-tag,.jobs-count,.inventory-local-tag {
+  color:#8a4d00;
+  background:#fff0c2;
+  border:1px solid #f4d98d;
+  font-size:11px;
+  font-weight:800;
+}
+.inventory-category { color:#6538d4; font-weight:700; }
+.inventory-low,.finance-negative { color:#c62828!important; }
+.finance-positive { color:#087b58!important; }
+.management-help,.job-help,.inventory-help {
+  color:#596982;
+  font-size:12px;
+  line-height:1.6;
+}
+.management-message { font-size:13px; font-weight:600; }
+.local-data-tag { font-size:11px; font-weight:800; }
+.auth-card h1 { font-size:31px; }
+.auth-description,.auth-card small { font-size:13px; }
+.auth-card label { font-size:13px; }
+.auth-card input { min-height:45px; font-size:15px; }
+@media(max-width:700px) {
+  .main-content { padding:22px 15px; }
+  .brand { font-size:20px; }
+  .nav-link { min-height:42px; font-size:12px; }
+  .nav-link span { flex-basis:26px; width:26px; height:26px; }
+  .welcome h2 { font-size:26px; }
+  .welcome p:last-child { font-size:14px; }
+  .module-card h3 { font-size:15px; }
+  .module-card p { font-size:12px; }
+  .jobs-intro h2,.inventory-intro h2,.management-heading h2 { font-size:24px; }
+  .jobs-card,.inventory-card,.management-card { padding:15px; }
+}
