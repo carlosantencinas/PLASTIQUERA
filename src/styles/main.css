@@ -551,3 +551,19 @@ h3 { font-weight: 700; }
   .jobs-intro h2,.inventory-intro h2,.management-heading h2 { font-size:24px; }
   .jobs-card,.inventory-card,.management-card { padding:15px; }
 }
+
+
+/* Acciones de etiquetas de producción */
+.jobs-history-actions {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:9px;
+}
+.jobs-history-actions .jobs-count { flex:none; }
+.job-table { min-width:760px; }
+@media(max-width:650px) {
+  .jobs-history-actions { justify-content:flex-start; }
+  .jobs-history-actions .job-action { white-space:normal; }
+}
