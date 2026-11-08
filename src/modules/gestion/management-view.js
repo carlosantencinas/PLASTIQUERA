@@ -19,7 +19,7 @@ function shell(section) {
   const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas'};
   return `
   <section class="management-module">
-    <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>Registros relacionados con la producción, los clientes y la venta de productos.</p></div><span class="local-data-tag">Datos guardados en Firebase</span></div>
+    <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>${section==='products'?'Productos terminados, existencias listas para vender y asignación de trabajos.':section==='dashboard'?'Resumen de producción, ventas y operación del taller.':'Registros relacionados con la producción, los clientes y la venta de productos.'}</p></div><span class="local-data-tag">Datos guardados en Firebase</span></div>
     <div id="management-message" class="management-message" hidden role="status"></div>
     ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():section==='finance'?finance():consignments()}
     <section class="backup-panel"><div><strong>Respaldo de datos</strong><p>Exporta periódicamente un archivo JSON. La importación reemplaza los datos actuales de Firebase.</p></div><div class="backup-actions"><button type="button" class="management-button secondary" id="backup-export">Exportar respaldo</button><label class="management-button secondary file-button">Importar respaldo<input type="file" id="backup-import" accept=".json,application/json" hidden></label></div></section>
@@ -45,16 +45,21 @@ function dashboard() {
 }
 
 function products() {
-  return `<div class="management-grid">
-    <form class="management-card" id="product-form"><h3 id="product-form-title">Crear producto</h3>
+  return `<div class="management-card product-sale-stock">
+    <h3>Productos disponibles para vender</h3>
+    <p class="management-help">Aquí aparecen los artículos terminados que tienen unidades disponibles. El stock se calcula con los trabajos asignados, las ventas y las entregas en consignación.</p>
+    <div id="sellable-products-table" class="management-table-wrap"></div>
+  </div>
+  <div class="management-grid">
+    <form class="management-card" id="product-form"><h3 id="product-form-title">Catálogo de productos</h3>
       <input type="hidden" name="id">
       <label class="management-field">Código único<input name="codigo" required placeholder="P-001"></label>
       <label class="management-field">Nombre<input name="nombre" required placeholder="Nombre del producto"></label>
       <label class="management-field">Notas<textarea name="notas" rows="3" placeholder="Variantes, color, tamaño…"></textarea></label>
       <div class="management-actions"><button class="management-button" type="submit">Guardar producto</button><button class="management-button secondary" type="reset" id="product-reset">Limpiar</button></div>
-      <p class="management-help">Asigna trabajos desde la tabla inferior. Un trabajo sólo puede pertenecer a un producto.</p>
+      <p class="management-help">Registra aquí los modelos o artículos que fabrica el taller. Para que aparezcan como disponibles para vender, asigna sus trabajos de producción al producto correspondiente.</p>
     </form>
-    <div class="management-card"><h3>Catálogo y existencias</h3><div class="management-table-wrap" id="products-table"></div></div>
+    <div class="management-card"><h3>Modelos registrados</h3><div class="management-table-wrap" id="products-table"></div></div>
   </div>
   <div class="management-card"><h3>Asignar trabajos a productos</h3><div id="product-assignments"></div></div>`;
 }
@@ -104,6 +109,30 @@ function consignments() {
     <div class="management-card"><h3>Resumen por tienda</h3><div id="consignment-summary"></div></div>
   </div>
   <div class="management-card"><h3>Historial de consignaciones</h3><div class="management-table-wrap" id="consignments-table"></div><div class="management-actions"><button class="management-button secondary" id="cons-print">Imprimir reporte</button></div></div>`;
+}
+
+function renderSellableProductsTable(root) {
+  const availableProducts = appState.products.map(product => {
+    const stock = stockFor(product.id);
+    const relatedJobs = jobIdsFor(product.id).sort((a,b) =>
+      Number(b.updatedAt || b.createdAt || b.data?.fecha || 0) - Number(a.updatedAt || a.createdAt || a.data?.fecha || 0)
+    );
+    const latestJob = relatedJobs[0];
+    const price = latestJob
+      ? (Number(latestJob.data?.piezasVendibles ?? 1) > 1
+        ? Number(latestJob.calc?.precioUnitario || 0)
+        : Number(latestJob.calc?.precioVenta || 0))
+      : 0;
+    return { product, stock, price };
+  }).filter(item => item.stock.available > 0);
+
+  if (!availableProducts.length) {
+    root.innerHTML = '<p class="management-empty">No hay productos terminados disponibles para vender. Registra trabajos y asígnalos a un producto para calcular sus existencias.</p>';
+    return;
+  }
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto terminado</th><th>Unidades disponibles</th><th>Precio referencial</th></tr></thead><tbody>${availableProducts.map(({product,stock,price}) =>
+    `<tr><td>${esc(product.codigo)}</td><td><b>${esc(product.nombre)}</b><small>${esc(product.notas || '')}</small></td><td><b>${stock.available}</b></td><td>${price > 0 ? money(price) : 'Sin precio calculado'}</td></tr>`
+  ).join('')}</tbody></table>`;
 }
 
 function renderProductsTable(root) {
@@ -318,7 +347,7 @@ function attachFinance(root) {
 export function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
-  if(section==='products'){renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
+  if(section==='products'){renderSellableProductsTable(container.querySelector('#sellable-products-table'));renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
   if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
