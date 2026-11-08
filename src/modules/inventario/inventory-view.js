@@ -140,8 +140,8 @@ export function renderInventoryView(container) {
   container.innerHTML = `
     <section class="inventory-module">
       <div class="inventory-intro">
-        <div><p class="eyebrow">ALMACÉN Y ABASTECIMIENTO</p><h2>Inventario y compras</h2>
-        <p>Control de materiales consumibles, equipos, existencias y costo promedio ponderado.</p></div>
+        <div><p class="eyebrow">ALMACÉN Y ABASTECIMIENTO</p><h2>Inventario de materiales e insumos</h2>
+        <p>Control de filamentos, resinas, consumibles, equipos, herramientas, compras, proveedores y movimientos de stock. Los productos terminados para vender se administran en el módulo Productos.</p></div>
         <span class="inventory-local-tag">Sincronización automática · Firestore</span>
       </div>
 
