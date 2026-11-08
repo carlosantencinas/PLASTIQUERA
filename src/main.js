@@ -2,7 +2,7 @@ import './styles/main.css';
 import { getFirebaseStatus, isFirebaseConfigured, auth } from './services/firebase.js';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { replaceAppStateFromCloud } from './services/app-store.js';
-import { readSharedState, writeSharedState } from './services/cloud-store.js';
+import { readSharedState, writeSharedState, subscribeSharedState } from './services/cloud-store.js';
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
@@ -57,6 +57,7 @@ const managementRoot=document.querySelector('#management-root');
 const statusText=document.querySelector('#firebase-status');
 const statusBadge=document.querySelector('#firebase-indicator');
 let cloudSyncEnabled=false;
+let unsubscribeCloud=null;
 let cloudQueue=Promise.resolve();
 let currentRoute='inicio';
 let modulesMounted=false;
@@ -102,7 +103,7 @@ async function syncCloud() {
     await cloudQueue;
     const el=document.querySelector('#save-status');
     if(el)el.textContent='Guardado en Firebase';
-    setStatus('Todos los cambios están guardados en Firestore.','Nube activa',true);
+    setStatus('Todos los cambios están guardados en Firestore.','Tiempo real activo',true);
     return true;
   } catch(error) {
     // Mantener la sincronización habilitada permite reintentar en el siguiente cambio.
@@ -115,6 +116,8 @@ async function syncCloud() {
   }
 }
 async function initializeUserSession(user) {
+  if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
+  cloudSyncEnabled=false;
   document.querySelector('#user-email').textContent=user.email||'Usuario autorizado';
   document.querySelector('#logout-button').hidden=false;
   appShell.hidden=true;
@@ -126,9 +129,21 @@ async function initializeUserSession(user) {
     replaceAppStateFromCloud(remote.data);
     cloudSyncEnabled=true;
     setStatus(remote.exists
-      ? 'Datos cargados desde Firestore. Los cambios se guardarán en la nube.'
-      : 'Base de Plastiquería creada y vacía en Firestore. Los cambios se guardarán en la nube.',
-      'Nube activa',true);
+      ? 'Conectado. Los cambios de otros dispositivos se reflejarán automáticamente.'
+      : 'Base de Plastiquería creada en Firestore. Sincronización en tiempo real activa.',
+      'Tiempo real activo',true);
+    unsubscribeCloud=subscribeSharedState(({data})=>{
+      if(!cloudSyncEnabled) return;
+      replaceAppStateFromCloud(data);
+      const el=document.querySelector('#save-status');
+      if(el)el.textContent='Sincronizado en tiempo real';
+      setStatus('Los cambios de los demás dispositivos se reciben automáticamente.','Tiempo real activo',true);
+    },error=>{
+      console.error('Se perdió la escucha en tiempo real de Firestore:',error);
+      setStatus('No se reciben cambios en tiempo real. Los guardados se seguirán intentando.','Escucha desconectada',false);
+      const el=document.querySelector('#save-status');
+      if(el)el.textContent='Escucha en tiempo real desconectada';
+    });
     mountModules();
     appShell.hidden=false;
     authScreen.hidden=true;
@@ -183,12 +198,14 @@ if(isFirebaseConfigured) {
   });
   document.querySelector('#logout-button').addEventListener('click',async()=>{
     cloudSyncEnabled=false;
+    if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
     await signOut(auth);
   });
   onAuthStateChanged(auth,user=>{
     if(user)initializeUserSession(user);
     else {
       cloudSyncEnabled=false;
+      if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
       appShell.hidden=true;
       authScreen.hidden=false;
       document.querySelector('#logout-button').hidden=true;
