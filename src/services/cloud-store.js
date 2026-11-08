@@ -1,4 +1,4 @@
-import { doc, getDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
@@ -37,6 +37,25 @@ export async function readSharedState() {
       jobMovements: data.jobMovements,
     },
   };
+}
+
+export function subscribeSharedState(onChange, onError = () => {}) {
+  if (!sharedRef) throw new Error('Firebase no está configurado.');
+  return onSnapshot(sharedRef, { includeMetadataChanges: true }, snapshot => {
+    // Ignorar escrituras locales pendientes. La confirmación del servidor llegará
+    // como un cambio de metadatos y permitirá aplicar el estado definitivo.
+    if (snapshot.metadata.hasPendingWrites) return;
+    const raw = snapshot.exists() ? snapshot.data() : {};
+    const data = normalized(raw);
+    onChange({
+      exists: snapshot.exists(),
+      data: {
+        jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
+        products: data.productos, clients: data.clientes, consignments: data.consignaciones,
+        expenses: data.expenses, jobMovements: data.jobMovements,
+      },
+    });
+  }, onError);
 }
 
 export async function writeSharedState() {
