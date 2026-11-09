@@ -61,6 +61,7 @@ function readForm(form) {
     cliente: String(fd.get('cliente') || '').trim(),
     fecha,
     descripcion: String(fd.get('descripcion') || '').trim(),
+    estadoTrabajo: String(fd.get('estadoTrabajo') || 'cotizacion'),
     materialId,
     materialNombre: selectedMaterial?.nombre || '',
     gramos: number(fd.get('gramos')),
@@ -172,16 +173,18 @@ function renderHistory() {
   }
   return `
     <div class="job-table-scroll"><table class="job-table">
-      <thead><tr><th>Trabajo</th><th>Fecha</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th>Etiquetas</th><th></th></tr></thead>
+      <thead><tr><th>Trabajo</th><th>Estado</th><th>Fecha</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr></thead>
       <tbody>${[...jobs].sort((a,b) => b.data.fecha - a.data.fecha).map(job => `
         <tr>
           <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
+          <td><span class="job-status job-status-${escapeText(job.data.estadoTrabajo || 'realizado')}">${({cotizacion:'Cotización',pendiente:'Pendiente',realizado:'Realizado'})[job.data.estadoTrabajo || 'realizado']}</span></td>
           <td>${new Date(job.data.fecha).toLocaleDateString('es-BO')}</td>
           <td>${money(job.calc.costoTotal)}</td>
           <td class="job-highlight">${money(job.calc.precioVenta)}</td>
           <td>${money(job.calc.ganancia)}</td>
           <td><div class="job-actions">
-            <button type="button" data-quote="${job.id}" class="job-action">Cotización</button>
+            <button type="button" data-quote="${job.id}" class="job-action">Ver cotización</button>
+            ${job.data.estadoTrabajo !== 'realizado' ? `<button type="button" data-mark-realized="${job.id}" class="job-action">Marcar realizado</button>` : ''}
             <button type="button" data-edit="${job.id}" class="job-action">Editar</button>
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
@@ -272,6 +275,11 @@ export function renderJobsView(container) {
             <label class="job-field"><span>Fecha del trabajo</span><input name="fecha" type="date"></label>
             <label class="job-field job-span-2"><span>Descripción / notas</span><textarea name="descripcion" rows="2" placeholder="Color, acabado, referencias…"></textarea></label>
           </div>
+          <div class="jobs-subheading">Tipo de registro</div>
+          <div class="jobs-form-grid">
+            <label class="job-field job-span-2"><span>Estado del trabajo</span><select name="estadoTrabajo"><option value="cotizacion" selected>Cotización (no descuenta inventario)</option><option value="pendiente">Aceptado / pendiente de producción</option><option value="realizado">Realizado (descuenta filamento)</option></select></label>
+          </div>
+          <p class="job-help">Una cotización o pedido pendiente no modifica el stock. Solo al marcarlo como realizado se registra el consumo.</p>
           <div class="jobs-subheading">Material</div>
           <div class="jobs-form-grid">
             <label class="job-field job-span-2"><span>Material del inventario</span>
@@ -365,11 +373,15 @@ export function renderJobsView(container) {
     const { data, calc } = values();
     preview.innerHTML = renderPreview(data, calc);
     const count = jobs.length;
-    const revenue = jobs.reduce((sum, job) => sum + job.calc.precioVenta, 0);
-    const profit = jobs.reduce((sum, job) => sum + job.calc.ganancia, 0);
+    const revenue = jobs.filter(job => (job.data.estadoTrabajo || 'realizado') === 'realizado').reduce((sum, job) => sum + job.calc.precioVenta, 0);
+    const profit = jobs.filter(job => (job.data.estadoTrabajo || 'realizado') === 'realizado').reduce((sum, job) => sum + job.calc.ganancia, 0);
+    const quotes = jobs.filter(job => job.data.estadoTrabajo === 'cotizacion').length;
+    const completed = jobs.filter(job => (job.data.estadoTrabajo || 'realizado') === 'realizado').length;
     stats.innerHTML = `
-      <article><span>TRABAJOS</span><strong>${count}</strong></article>
-      <article><span>VENTAS PROYECTADAS</span><strong>${money(revenue)}</strong></article>
+      <article><span>REGISTROS</span><strong>${count}</strong></article>
+      <article><span>COTIZACIONES</span><strong>${quotes}</strong></article>
+      <article><span>REALIZADOS</span><strong>${completed}</strong></article>
+      <article><span>VENTAS REALIZADAS</span><strong>${money(revenue)}</strong></article>
       <article><span>GANANCIA PROYECTADA</span><strong>${money(profit)}</strong></article>
     `;
     history.innerHTML = renderHistory();
@@ -413,11 +425,16 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     try {
-      const movement = applyJobMaterial(jobId, data);
-      if (movement) {
-        data.materialId = movement.materialId;
-        data.materialNombre = movement.materialNombre;
-        data.precioKg = movement.costoUnitario * 1000;
+      let movement = null;
+      if (data.estadoTrabajo === 'realizado') {
+        movement = applyJobMaterial(jobId, data);
+        if (movement) {
+          data.materialId = movement.materialId;
+          data.materialNombre = movement.materialNombre;
+          data.precioKg = movement.costoUnitario * 1000;
+        }
+      } else {
+        removeJobMaterial(jobId);
       }
       const calc = calculateJob(data);
       if (editingId) {
@@ -443,6 +460,7 @@ export function renderJobsView(container) {
     const productionLabel = event.target.closest('[data-production-label]');
     const printAllLabels = event.target.closest('[data-print-production-all]');
     const editButton = event.target.closest('[data-edit]');
+    const markRealized = event.target.closest('[data-mark-realized]');
     const deleteButton = event.target.closest('[data-delete]');
     if (productionLabel) {
       const job = jobs.find(item => item.id === productionLabel.dataset.productionLabel);
@@ -452,6 +470,24 @@ export function renderJobsView(container) {
     if (quoteButton) {
       const job = jobs.find(item => item.id === quoteButton.dataset.quote);
       if (job) openQuote(job);
+    }
+    if (markRealized) {
+      const job = jobs.find(item => item.id === markRealized.dataset.markRealized);
+      if (!job || job.data.estadoTrabajo === 'realizado') return;
+      if (!window.confirm(`¿Confirmas que el trabajo "${job.data.nombre}" fue realizado? Se descontará el filamento registrado del inventario.`)) return;
+      try {
+        const movement = applyJobMaterial(job.id, job.data);
+        if (movement) {
+          job.data.materialId = movement.materialId;
+          job.data.materialNombre = movement.materialNombre;
+          job.data.precioKg = movement.costoUnitario * 1000;
+        }
+        job.data.estadoTrabajo = 'realizado';
+        job.updatedAt = Date.now();
+        saveAppState();
+        window.dispatchEvent(new Event('inventory:updated'));
+        refresh();
+      } catch (error) { window.alert(error.message); }
     }
     if (editButton) {
       const job = jobs.find(item => item.id === editButton.dataset.edit);
