@@ -11,6 +11,7 @@ import {
   recordPurchase,
   deletePurchase,
   applyJobMaterial,
+  applyJobMaterials,
   removeJobMaterial,
 } from '../src/services/inventory-store.js';
 
@@ -119,4 +120,48 @@ test('cambiar un trabajo a costo manual devuelve el material consumido', () => {
   applyJobMaterial('job-3', { materialId: 'manual', gramos: 250 });
   assert.equal(inventoryState.materials[0].stock, 1000);
   assert.equal(inventoryState.jobMovements.length, 0);
+});
+
+
+test('consume varios filamentos por trabajo, reemplazar movimientos y restaurar al eliminar', () => {
+  loadInventorySnapshot({ materials: [
+    { id: 'black', nombre: 'PLA negro', unidad: 'g', stock: 100, costoPromedio: 0.12 },
+    { id: 'white', nombre: 'PLA blanco', unidad: 'g', stock: 50, costoPromedio: 0.14 },
+  ] });
+  applyJobMaterials('multi-1', { nombre: 'Pieza bicolor', materiales: [
+    { materialId: 'black', gramos: 30, color: 'Negro', extruder: '1' },
+    { materialId: 'white', gramos: 15, color: 'Blanco', extruder: '2' },
+  ] });
+  assert.equal(inventoryState.materials.find(item => item.id === 'black').stock, 70);
+  assert.equal(inventoryState.materials.find(item => item.id === 'white').stock, 35);
+  assert.equal(inventoryState.jobMovements.length, 2);
+
+  applyJobMaterials('multi-1', { nombre: 'Pieza bicolor', materiales: [
+    { materialId: 'black', gramos: 25, color: 'Negro' },
+    { materialId: 'white', gramos: 10, color: 'Blanco' },
+  ] });
+  assert.equal(inventoryState.materials.find(item => item.id === 'black').stock, 75);
+  assert.equal(inventoryState.materials.find(item => item.id === 'white').stock, 40);
+  assert.equal(inventoryState.jobMovements.length, 2);
+
+  removeJobMaterial('multi-1');
+  assert.equal(inventoryState.materials.find(item => item.id === 'black').stock, 100);
+  assert.equal(inventoryState.materials.find(item => item.id === 'white').stock, 50);
+  assert.equal(inventoryState.jobMovements.length, 0);
+});
+
+test('si falta stock en un color, no modifica ninguno de los stocks ni pierde los movimientos anteriores', () => {
+  loadInventorySnapshot({ materials: [
+    { id: 'black', nombre: 'PLA negro', unidad: 'g', stock: 100, costoPromedio: 0.12 },
+    { id: 'white', nombre: 'PLA blanco', unidad: 'g', stock: 8, costoPromedio: 0.14 },
+  ] });
+  applyJobMaterials('multi-2', { nombre: 'Trabajo', materiales: [
+    { materialId: 'black', gramos: 10 }, { materialId: 'white', gramos: 5 },
+  ] });
+  assert.throws(() => applyJobMaterials('multi-2', { nombre: 'Trabajo', materiales: [
+    { materialId: 'black', gramos: 20 }, { materialId: 'white', gramos: 10 },
+  ] }), /Stock insuficiente de PLA blanco/);
+  assert.equal(inventoryState.materials.find(item => item.id === 'black').stock, 90);
+  assert.equal(inventoryState.materials.find(item => item.id === 'white').stock, 3);
+  assert.equal(inventoryState.jobMovements.length, 2);
 });
