@@ -415,6 +415,7 @@ export function renderJobsView(container) {
     event.preventDefault();
     const makeQuote = event.submitter?.dataset.action === 'quote';
     const { data } = values();
+    if (makeQuote) data.estadoTrabajo = 'cotizacion';
     if (!data.nombre) return;
     if (editingId) {
       const sold = appState.sales.filter(sale => sale.jobId === editingId).reduce((sum, sale) => sum + Number(sale.cantidad || 1), 0);
