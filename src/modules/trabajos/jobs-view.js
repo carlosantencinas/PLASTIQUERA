@@ -263,12 +263,12 @@ export function renderJobsView(container) {
     <section class="jobs-module">
       <div class="jobs-intro">
         <div><p class="eyebrow">PRODUCCIÓN</p><h2>Trabajos de impresión</h2><p>Registra pedidos y calcula el costo real estimado de cada lote.</p></div>
-        <span class="jobs-local-tag">Guardado local automático</span>
+        <span class="jobs-local-tag">Sincronizado en Firestore</span>
       </div>
       <div class="jobs-stats" id="jobsStats"></div>
       <div class="jobs-layout">
         <form class="jobs-card" id="jobForm">
-          <div class="jobs-card-heading"><div><p class="eyebrow">NUEVO REGISTRO</p><h3 id="jobFormTitle">Nuevo trabajo</h3></div><span class="jobs-step">01</span></div>
+          <div class="jobs-card-heading"><div><p class="eyebrow">NUEVO REGISTRO</p><h3 id="jobFormTitle">Nuevo trabajo o cotización</h3></div><span class="jobs-step">01</span></div>
           <div class="jobs-form-grid">
             <label class="job-field job-span-2"><span>Nombre del trabajo *</span><input name="nombre" required placeholder="Ej. Soporte para celular x3"></label>
             <label class="job-field"><span>Cliente / solicitado por</span><input name="cliente" placeholder="Nombre del cliente"></label>
@@ -316,7 +316,7 @@ export function renderJobsView(container) {
             ${input('margen','Ganancia sobre costo (%)','number','40')}
           </div>
           <div class="jobs-form-actions">
-            <button class="job-save" type="submit" id="jobSaveButton">Guardar trabajo</button>
+            <button class="job-save" type="submit" id="jobSaveButton">Guardar registro</button>
             <button class="job-reset" type="submit" data-action="quote">Guardar y cotizar</button>
             <button class="job-reset" type="button" id="jobResetButton">Limpiar</button>
           </div>
@@ -397,8 +397,8 @@ export function renderJobsView(container) {
     form.elements.precioKwh.value = '0.7';
     form.elements.tipoImpresora.value = 'Anycubic Kobra X (FDM multicolor)';
     form.elements.watts.value = '1450';
-    container.querySelector('#jobFormTitle').textContent = 'Nuevo trabajo';
-    container.querySelector('#jobSaveButton').textContent = 'Guardar trabajo';
+    container.querySelector('#jobFormTitle').textContent = 'Nuevo trabajo o cotización';
+    container.querySelector('#jobSaveButton').textContent = 'Guardar registro';
     refresh();
   }
 
@@ -467,7 +467,7 @@ export function renderJobsView(container) {
       const job = jobs.find(item => item.id === productionLabel.dataset.productionLabel);
       if (job) printProductionLabels([job]);
     }
-    if (printAllLabels) printProductionLabels(jobs);
+    if (printAllLabels) printProductionLabels(jobs.filter(job => (job.data.estadoTrabajo || 'realizado') === 'realizado'));
     if (quoteButton) {
       const job = jobs.find(item => item.id === quoteButton.dataset.quote);
       if (job) openQuote(job);
