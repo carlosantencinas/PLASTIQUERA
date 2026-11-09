@@ -391,15 +391,19 @@ export function renderJobsView(container) {
   }
 
   function refreshMaterialOptions() {
-    const previous = [...filamentRoot.querySelectorAll('[data-filament-row]')].map(row => ({
-      materialId: row.querySelector('[data-filament-material]').value,
-      gramos: row.querySelector('[data-filament-grams]').value,
-      color: row.querySelector('[data-filament-color]').value,
-      extruder: row.dataset.extruder, source: row.dataset.source,
-    }));
-    setFilamentRows(previous.length ? previous : [{}]);
-    const linked = previous.filter(row => row.materialId !== 'manual').length;
-    materialPrice.readOnly = linked > 0 && previous.every(row => row.materialId !== 'manual');
+    let rows = [...filamentRoot.querySelectorAll('[data-filament-row]')];
+    if (!rows.length) { setFilamentRows([{}]); rows = [...filamentRoot.querySelectorAll('[data-filament-row]')]; }
+    rows.forEach(row => {
+      const select = row.querySelector('[data-filament-material]');
+      const selected = select.value || 'manual';
+      const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
+        .filter(item => item.unidad === 'g')
+        .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+      select.innerHTML = options.join('');
+      select.value = inventoryState.materials.some(item => item.id === selected && item.unidad === 'g') ? selected : 'manual';
+    });
+    const linked = rows.filter(row => row.querySelector('[data-filament-material]').value !== 'manual').length;
+    materialPrice.readOnly = linked > 0 && linked === rows.length;
     materialHelp.textContent = linked
       ? 'Cada filamento seleccionado usa su costo promedio. Al confirmar el trabajo como realizado se descontará cada consumo del stock correspondiente.'
       : 'Los filamentos en costo manual no descuentan inventario. Vincula cada color a una bobina para controlar sus existencias.';
@@ -446,8 +450,6 @@ export function renderJobsView(container) {
   }
 
   form.addEventListener('input', refresh);
-  filamentRoot.addEventListener('input', refresh);
-  filamentRoot.addEventListener('change', refresh);
   filamentRoot.addEventListener('click', event => {
     if (event.target.closest('[data-remove-filament]')) { event.target.closest('[data-filament-row]')?.remove(); refresh(); }
   });
