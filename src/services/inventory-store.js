@@ -153,7 +153,10 @@ export function applyJobMaterials(jobId, jobData) {
     });
     return movements.length ? movements : null;
   } catch (error) {
-    restorePrevious();
+    for (const movement of previous) {
+      const material = getMaterialById(movement.materialId);
+      if (material) material.stock = Math.max(0, material.stock - Number(movement.grams || 0));
+    }
     inventoryState.jobMovements.push(...previous);
     throw error;
   }
