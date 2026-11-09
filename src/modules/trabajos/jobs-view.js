@@ -450,6 +450,7 @@ export function renderJobsView(container) {
   }
 
   form.addEventListener('input', refresh);
+  filamentRoot.addEventListener('change', refresh);
   filamentRoot.addEventListener('click', event => {
     if (event.target.closest('[data-remove-filament]')) { event.target.closest('[data-filament-row]')?.remove(); refresh(); }
   });
