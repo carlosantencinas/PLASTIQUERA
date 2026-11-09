@@ -567,3 +567,9 @@ h3 { font-weight: 700; }
   .jobs-history-actions { justify-content:flex-start; }
   .jobs-history-actions .job-action { white-space:normal; }
 }
+
+/* Estados de cotizaciones y producción */
+.job-status { display:inline-flex; align-items:center; padding:5px 9px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+.job-status-cotizacion { color:#2456a6; background:#eaf2ff; }
+.job-status-pendiente { color:#8a5a08; background:#fff3d9; }
+.job-status-realizado { color:#187346; background:#e5f7ed; }
