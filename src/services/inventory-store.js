@@ -105,60 +105,74 @@ export function deleteMaterial(id) {
  * Al editar, primero revierte el movimiento anterior y luego registra el nuevo.
  * Si el nuevo consumo no es válido, restaura el movimiento previo.
  */
-export function applyJobMaterial(jobId, jobData) {
-  const previous = inventoryState.jobMovements.find(item => item.jobId === jobId) || null;
-
-  if (previous) {
-    const oldMaterial = getMaterialById(previous.materialId);
-    if (oldMaterial) oldMaterial.stock += previous.grams;
-    inventoryState.jobMovements = inventoryState.jobMovements.filter(item => item.jobId !== jobId);
-  }
-
+export function applyJobMaterials(jobId, jobData) {
+  const previous = inventoryState.jobMovements.filter(item => item.jobId === jobId);
+  const restorePrevious = () => {
+    for (const movement of previous) {
+      const material = getMaterialById(movement.materialId);
+      if (material) material.stock += Number(movement.grams || 0);
+    }
+  };
+  restorePrevious();
+  inventoryState.jobMovements = inventoryState.jobMovements.filter(item => item.jobId !== jobId);
   try {
-    const materialId = String(jobData.materialId || 'manual');
-    const grams = Number(jobData.gramos || 0);
-
-    if (materialId === 'manual') return null;
-    if (!Number.isFinite(grams) || grams <= 0) throw new Error('Indica una cantidad de gramos mayor que cero.');
-
-    const material = getMaterialById(materialId);
-    if (!material) throw new Error('El material seleccionado ya no existe en el inventario.');
-    if (material.unidad !== 'g') throw new Error('El material seleccionado no está expresado en gramos.');
-
-    if (grams > material.stock + 1e-9) {
-      throw new Error(`Stock insuficiente de ${material.nombre}. Disponible: ${material.stock.toFixed(2)} g; solicitado: ${grams.toFixed(2)} g.`);
+    const rows = Array.isArray(jobData.materiales) && jobData.materiales.length
+      ? jobData.materiales
+      : [{ materialId: jobData.materialId || 'manual', gramos: jobData.gramos, color: '' }];
+    const requested = rows.map(row => ({
+      materialId: String(row.materialId || 'manual'),
+      grams: Number(row.gramos ?? row.grams ?? 0),
+      color: String(row.color || '').trim(),
+      extruder: row.extruder || null,
+      source: row.source || jobData.fuenteConsumo || 'manual',
+    })).filter(row => row.grams > 0 && row.materialId !== 'manual');
+    for (const row of requested) {
+      if (!Number.isFinite(row.grams) || row.grams <= 0) throw new Error('Cada consumo debe tener gramos mayores que cero.');
+      const material = getMaterialById(row.materialId);
+      if (!material) throw new Error('Uno de los filamentos seleccionados ya no existe en el inventario.');
+      if (material.unidad !== 'g') throw new Error(`El material ${material.nombre} no está expresado en gramos.`);
     }
-
-    material.stock = Math.max(0, material.stock - grams);
-    const movement = {
-      id: makeId('consumo'),
-      jobId,
-      jobNombre: String(jobData.nombre || ''),
-      materialId,
-      materialNombre: material.nombre,
-      grams,
-      costoUnitario: material.costoPromedio,
-      costoTotal: grams * material.costoPromedio,
-      fecha: Date.now(),
-    };
-    inventoryState.jobMovements.push(movement);
-    return movement;
+    const totals = new Map();
+    for (const row of requested) totals.set(row.materialId, (totals.get(row.materialId) || 0) + row.grams);
+    for (const [materialId, grams] of totals) {
+      const material = getMaterialById(materialId);
+      if (grams > material.stock + 1e-9) throw new Error(`Stock insuficiente de ${material.nombre}. Disponible: ${material.stock.toFixed(2)} g; solicitado: ${grams.toFixed(2)} g.`);
+    }
+    const movements = requested.map(row => {
+      const material = getMaterialById(row.materialId);
+      material.stock = Math.max(0, material.stock - row.grams);
+      const movement = {
+        id: makeId('consumo'), jobId, jobNombre: String(jobData.nombre || ''),
+        materialId: material.id, materialNombre: material.nombre, materialColor: row.color,
+        extruder: row.extruder, source: row.source, grams: row.grams,
+        costoUnitario: material.costoPromedio, costoTotal: row.grams * material.costoPromedio,
+        fecha: Date.now(),
+      };
+      inventoryState.jobMovements.push(movement);
+      return movement;
+    });
+    return movements.length ? movements : null;
   } catch (error) {
-    if (previous) {
-      const oldMaterial = getMaterialById(previous.materialId);
-      if (oldMaterial) oldMaterial.stock = Math.max(0, oldMaterial.stock - previous.grams);
-      inventoryState.jobMovements.push(previous);
-    }
+    restorePrevious();
+    inventoryState.jobMovements.push(...previous);
     throw error;
   }
 }
 
+/** Compatibilidad con trabajos históricos que utilizaban un solo filamento. */
+export function applyJobMaterial(jobId, jobData) {
+  const movements = applyJobMaterials(jobId, jobData);
+  return movements?.[0] || null;
+}
+
 /** Devuelve al stock el consumo de un trabajo antes de eliminarlo. */
 export function removeJobMaterial(jobId) {
-  const movement = inventoryState.jobMovements.find(item => item.jobId === jobId);
-  if (!movement) return false;
-  const material = getMaterialById(movement.materialId);
-  if (material) material.stock += movement.grams;
+  const movements = inventoryState.jobMovements.filter(item => item.jobId === jobId);
+  if (!movements.length) return false;
+  for (const movement of movements) {
+    const material = getMaterialById(movement.materialId);
+    if (material) material.stock += Number(movement.grams || 0);
+  }
   inventoryState.jobMovements = inventoryState.jobMovements.filter(item => item.jobId !== jobId);
   return true;
 }
