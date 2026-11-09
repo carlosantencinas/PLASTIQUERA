@@ -1,7 +1,7 @@
 import { calculateJob } from '../../calculations/jobs.js';
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState } from '../../services/app-store.js';
-import { inventoryState, getMaterialById, applyJobMaterial, removeJobMaterial } from '../../services/inventory-store.js';
+import { inventoryState, getMaterialById, applyJobMaterials, removeJobMaterial } from '../../services/inventory-store.js';
 
 const money = value =>
   'Bs ' + Number(value || 0).toLocaleString('es-BO', {
@@ -52,9 +52,22 @@ function readForm(form) {
   const fecha = fd.get('fecha')
     ? new Date(`${fd.get('fecha')}T12:00:00`).getTime()
     : Date.now();
-  const materialId = String(fd.get('materialId') || 'manual');
-  const selectedMaterial = materialId === 'manual' ? null : getMaterialById(materialId);
-  const precioKg = selectedMaterial ? selectedMaterial.costoPromedio * 1000 : number(fd.get('precioKg'));
+  const materiales = [...form.querySelectorAll('[data-filament-row]')].map(row => ({
+    materialId: String(row.querySelector('[data-filament-material]')?.value || 'manual'),
+    gramos: number(row.querySelector('[data-filament-grams]')?.value),
+    color: String(row.querySelector('[data-filament-color]')?.value || '').trim(),
+    extruder: row.dataset.extruder || '',
+    source: row.dataset.source || 'manual',
+  })).filter(row => row.gramos > 0);
+  const gramosTotal = materiales.reduce((sum, row) => sum + row.gramos, 0);
+  const costoMaterialTotal = materiales.reduce((sum, row) => {
+    const material = getMaterialById(row.materialId);
+    const pricePerKg = material ? material.costoPromedio * 1000 : number(fd.get('precioKg'));
+    return sum + row.gramos * pricePerKg / 1000;
+  }, 0);
+  const precioKg = gramosTotal > 0 ? costoMaterialTotal * 1000 / gramosTotal : number(fd.get('precioKg'));
+  const materialId = materiales.find(row => row.materialId !== 'manual')?.materialId || 'manual';
+  const selectedNames = [...new Set(materiales.map(row => getMaterialById(row.materialId)?.nombre).filter(Boolean))];
 
   return {
     nombre: String(fd.get('nombre') || '').trim(),
@@ -63,8 +76,9 @@ function readForm(form) {
     descripcion: String(fd.get('descripcion') || '').trim(),
     estadoTrabajo: String(fd.get('estadoTrabajo') || 'cotizacion'),
     materialId,
-    materialNombre: selectedMaterial?.nombre || '',
-    gramos: number(fd.get('gramos')),
+    materialNombre: selectedNames.join(', '),
+    materiales,
+    gramos: gramosTotal,
     precioKg,
     horasImp,
     minImp,
@@ -82,6 +96,22 @@ function readForm(form) {
     piezasVendibles: Math.max(piezas - piezasFallidas, 0),
     margen: number(fd.get('margen')),
   };
+}
+
+function parseSlicerGcode(content) {
+  const findValues = pattern => {
+    const match = content.match(pattern);
+    return match ? match[1].split(/[;,|]/).map(value => value.trim()).filter(Boolean) : [];
+  };
+  const grams = findValues(/^\s*;\s*(?:filament used|filament weight|filament_usage)\s*\[?g\]?\s*[:=]\s*([^\r\n]+)/im)
+    .map(value => Number.parseFloat(value.replace(',', '.'))).filter(value => Number.isFinite(value) && value > 0);
+  const colors = findValues(/^\s*;\s*(?:filament_colour|filament_color|extruder_colour|extruder_color)\s*[:=]\s*([^\r\n]+)/im);
+  const types = findValues(/^\s*;\s*filament_type\s*[:=]\s*([^\r\n]+)/im);
+  return grams.map((value, index) => ({
+    materialId: 'manual', gramos: value,
+    color: [types[index], colors[index]].filter(Boolean).join(' · '),
+    extruder: String(index + 1), source: 'Anycubic Slicer / G-code',
+  }));
 }
 
 function renderPreview(data, calc) {
@@ -280,18 +310,16 @@ export function renderJobsView(container) {
             <label class="job-field job-span-2"><span>Estado del trabajo</span><select name="estadoTrabajo"><option value="cotizacion" selected>Cotización (no descuenta inventario)</option><option value="pendiente">Aceptado / pendiente de producción</option><option value="realizado">Realizado (descuenta filamento)</option></select></label>
           </div>
           <p class="job-help">Una cotización o pedido pendiente no modifica el stock. Solo al marcarlo como realizado se registra el consumo.</p>
-          <div class="jobs-subheading">Material</div>
+          <div class="jobs-subheading">Filamentos y colores</div>
           <div class="jobs-form-grid">
-            <label class="job-field job-span-2"><span>Material del inventario</span>
-              <select name="materialId" id="jobMaterialSelect">
-                <option value="manual">Costo manual (sin descontar inventario)</option>
-                ${inventoryState.materials.filter(item => item.unidad === 'g').map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g disponibles · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`).join('')}
-              </select>
-            </label>
-            ${input('gramos','Cantidad utilizada (g)','number','120')}
-            ${input('precioKg','Precio del material (Bs/kg)','number','95')}
+            <label class="job-field job-span-2"><span>Precio manual de referencia (Bs/kg)</span><input name="precioKg" type="number" min="0" step="any" placeholder="95"></label>
+            <div class="job-span-2 filament-toolbar">
+              <button type="button" class="job-action" id="addFilamentRow">+ Agregar filamento</button>
+              <label class="job-action filament-import">Importar consumo del slicer (.gcode)<input type="file" id="slicerGcodeFile" accept=".gcode,.gco,.gc,.txt" hidden></label>
+            </div>
+            <div class="job-span-2" id="jobFilaments"></div>
+            <p class="job-help job-span-2" id="jobMaterialHelp">Agrega una fila por cada color/material. Puedes importar los gramos estimados desde un archivo G-code si Anycubic Slicer los incluye.</p>
           </div>
-          <p class="job-help" id="jobMaterialHelp">Selecciona un material para usar su costo promedio y descontar el consumo. Si eliges costo manual, el inventario no cambia.</p>
           <div class="jobs-subheading">Impresión</div>
           <div class="jobs-form-grid">
             ${input('horasImp','Horas de impresión','number','4')}
@@ -338,29 +366,43 @@ export function renderJobsView(container) {
   const preview = container.querySelector('#jobPreview');
   const history = container.querySelector('#jobHistory');
   const stats = container.querySelector('#jobsStats');
-  const materialSelect = form.elements.materialId;
   const materialPrice = form.elements.precioKg;
+  const filamentRoot = container.querySelector('#jobFilaments');
   const materialHelp = container.querySelector('#jobMaterialHelp');
 
-  function refreshMaterialOptions() {
-    const selected = materialSelect.value || 'manual';
-    const options = inventoryState.materials
+  function filamentRowMarkup(row = {}) {
+    const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
       .filter(item => item.unidad === 'g')
-      .map(item => {
-        const disabled = item.stock <= 0 ? ' disabled' : '';
-        return `<option value="${escapeText(item.id)}"${disabled}>${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g disponibles · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`;
-      }).join('');
-    materialSelect.innerHTML = '<option value="manual">Costo manual (sin descontar inventario)</option>' + options;
-    materialSelect.value = inventoryState.materials.some(item => item.id === selected && item.unidad === 'g') ? selected : 'manual';
-    const material = getMaterialById(materialSelect.value);
-    if (material) {
-      materialPrice.value = (material.costoPromedio * 1000).toFixed(4);
-      materialPrice.readOnly = true;
-      materialHelp.textContent = `Costo promedio: Bs ${(material.costoPromedio * 1000).toFixed(2)}/kg. Al guardar se descontarán los gramos utilizados del stock.`;
-    } else {
-      materialPrice.readOnly = false;
-      materialHelp.textContent = 'Costo manual: no se descontará material del inventario.';
-    }
+      .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+    return `<div class="filament-row" data-filament-row data-extruder="${escapeText(row.extruder || '')}" data-source="${escapeText(row.source || 'manual')}">
+      <label class="job-field"><span>Material / bobina</span><select data-filament-material>${options.join('')}</select></label>
+      <label class="job-field"><span>Color</span><input data-filament-color type="text" value="${escapeText(row.color || '')}" placeholder="Negro, rojo…"></label>
+      <label class="job-field"><span>Consumo (g)</span><input data-filament-grams type="number" min="0" step="0.01" value="${Number(row.gramos || 0) || ''}" placeholder="35"></label>
+      <button type="button" class="job-action danger" data-remove-filament title="Quitar filamento">Quitar</button>
+      <small>${row.extruder ? `Extrusor ${escapeText(row.extruder)} · Importado del slicer` : 'Consumo previsto / confirmado'}</small>
+    </div>`;
+  }
+
+  function setFilamentRows(rows = [{}]) {
+    filamentRoot.innerHTML = rows.map(filamentRowMarkup).join('');
+    [...filamentRoot.querySelectorAll('[data-filament-row]')].forEach((row, index) => {
+      row.querySelector('[data-filament-material]').value = rows[index]?.materialId || 'manual';
+    });
+  }
+
+  function refreshMaterialOptions() {
+    const previous = [...filamentRoot.querySelectorAll('[data-filament-row]')].map(row => ({
+      materialId: row.querySelector('[data-filament-material]').value,
+      gramos: row.querySelector('[data-filament-grams]').value,
+      color: row.querySelector('[data-filament-color]').value,
+      extruder: row.dataset.extruder, source: row.dataset.source,
+    }));
+    setFilamentRows(previous.length ? previous : [{}]);
+    const linked = previous.filter(row => row.materialId !== 'manual').length;
+    materialPrice.readOnly = linked > 0 && previous.every(row => row.materialId !== 'manual');
+    materialHelp.textContent = linked
+      ? 'Cada filamento seleccionado usa su costo promedio. Al confirmar el trabajo como realizado se descontará cada consumo del stock correspondiente.'
+      : 'Los filamentos en costo manual no descuentan inventario. Vincula cada color a una bobina para controlar sus existencias.';
   }
 
   function values() {
@@ -396,6 +438,7 @@ export function renderJobsView(container) {
     form.elements.fecha.value = dateInput(Date.now());
     form.elements.precioKwh.value = '0.7';
     form.elements.tipoImpresora.value = 'Anycubic Kobra X (FDM multicolor)';
+    setFilamentRows([{}]);
     form.elements.watts.value = '1450';
     container.querySelector('#jobFormTitle').textContent = 'Nuevo trabajo o cotización';
     container.querySelector('#jobSaveButton').textContent = 'Guardar registro';
@@ -403,7 +446,26 @@ export function renderJobsView(container) {
   }
 
   form.addEventListener('input', refresh);
-  materialSelect.addEventListener('change', refresh);
+  filamentRoot.addEventListener('input', refresh);
+  filamentRoot.addEventListener('change', refresh);
+  filamentRoot.addEventListener('click', event => {
+    if (event.target.closest('[data-remove-filament]')) { event.target.closest('[data-filament-row]')?.remove(); refresh(); }
+  });
+  container.querySelector('#addFilamentRow').addEventListener('click', () => {
+    const rows = [...filamentRoot.querySelectorAll('[data-filament-row]')].map(row => ({ materialId: row.querySelector('[data-filament-material]').value, gramos: row.querySelector('[data-filament-grams]').value, color: row.querySelector('[data-filament-color]').value }));
+    rows.push({}); setFilamentRows(rows); refresh();
+  });
+  container.querySelector('#slicerGcodeFile').addEventListener('change', async event => {
+    const file = event.target.files?.[0]; if (!file) return;
+    try {
+      const parsed = parseSlicerGcode(await file.text());
+      if (!parsed.length) throw new Error('No encontré gramos por filamento en los metadatos del G-code. Exporta el G-code desde la vista previa de Anycubic Slicer después de laminar.');
+      const existing = [...filamentRoot.querySelectorAll('[data-filament-row]')].map(row => ({ materialId: row.querySelector('[data-filament-material]').value, gramos: row.querySelector('[data-filament-grams]').value, color: row.querySelector('[data-filament-color]').value })).filter(row => Number(row.gramos) > 0);
+      setFilamentRows([...existing, ...parsed]); refresh();
+      window.alert(`Se importaron ${parsed.length} extrusor(es) con consumo estimado. Asigna cada uno a su bobina del inventario antes de guardar.`);
+    } catch (error) { window.alert(error.message); }
+    event.target.value = '';
+  });
   window.addEventListener('inventory:updated', refresh);
   form.elements.tipoImpresora.addEventListener('change', () => {
     const selected = printerOptions.find(option => option[0] === form.elements.tipoImpresora.value);
@@ -426,14 +488,8 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     try {
-      let movement = null;
       if (data.estadoTrabajo === 'realizado') {
-        movement = applyJobMaterial(jobId, data);
-        if (movement) {
-          data.materialId = movement.materialId;
-          data.materialNombre = movement.materialNombre;
-          data.precioKg = movement.costoUnitario * 1000;
-        }
+        applyJobMaterials(jobId, data);
       } else {
         removeJobMaterial(jobId);
       }
@@ -477,12 +533,7 @@ export function renderJobsView(container) {
       if (!job || job.data.estadoTrabajo === 'realizado') return;
       if (!window.confirm(`¿Confirmas que el trabajo "${job.data.nombre}" fue realizado? Se descontará el filamento registrado del inventario.`)) return;
       try {
-        const movement = applyJobMaterial(job.id, job.data);
-        if (movement) {
-          job.data.materialId = movement.materialId;
-          job.data.materialNombre = movement.materialNombre;
-          job.data.precioKg = movement.costoUnitario * 1000;
-        }
+        applyJobMaterials(job.id, job.data);
         job.data.estadoTrabajo = 'realizado';
         job.updatedAt = Date.now();
         saveAppState();
@@ -496,9 +547,11 @@ export function renderJobsView(container) {
       editingId = job.id;
       Object.entries(job.data).forEach(([key, value]) => {
         if (form.elements[key]) {
+          if (key === 'materiales') return;
           form.elements[key].value = key === 'fecha' ? dateInput(value) : value;
         }
       });
+      setFilamentRows(Array.isArray(job.data.materiales) && job.data.materiales.length ? job.data.materiales : [{ materialId: job.data.materialId || 'manual', gramos: job.data.gramos, color: '' }]);
       container.querySelector('#jobFormTitle').textContent = 'Editar trabajo';
       container.querySelector('#jobSaveButton').textContent = 'Guardar cambios';
       form.scrollIntoView({ behavior: 'smooth', block: 'start' });
