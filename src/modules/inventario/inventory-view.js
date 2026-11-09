@@ -125,11 +125,11 @@ function renderJobMovements() {
     return '<div class="inventory-empty"><strong>Sin consumos registrados</strong><span>Los descuentos de material asociados a trabajos aparecerán aquí.</span></div>';
   }
   return `<div class="inventory-table-wrap"><table class="inventory-table">
-    <thead><tr><th>Fecha</th><th>Trabajo</th><th>Material</th><th>Consumo</th><th>Costo aplicado</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Trabajo</th><th>Material / color</th><th>Consumo</th><th>Costo aplicado</th></tr></thead>
     <tbody>${movements.map(item => `<tr>
       <td>${new Date(item.fecha).toLocaleDateString('es-BO')}</td>
       <td><strong>${escapeText(item.jobNombre || item.jobId)}</strong></td>
-      <td>${escapeText(item.materialNombre)}</td>
+      <td><strong>${escapeText(item.materialNombre)}</strong>${item.materialColor ? `<small>${escapeText(item.materialColor)}</small>` : ''}${item.extruder ? `<small>Extrusor ${escapeText(item.extruder)}</small>` : ''}</td>
       <td>${Number(item.grams).toLocaleString('es-BO')} g</td>
       <td>${money(item.costoTotal)}</td>
     </tr>`).join('')}</tbody>
