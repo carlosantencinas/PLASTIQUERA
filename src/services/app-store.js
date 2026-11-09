@@ -38,6 +38,11 @@ export function replaceAppStateFromCloud(data = {}) {
     appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
+  // Los registros anteriores a los estados se consideran trabajos históricos ya realizados.
+  for (const job of appState.jobs) {
+    if (!job?.data) continue;
+    if (!job.data.estadoTrabajo) job.data.estadoTrabajo = 'realizado';
+  }
   normalizeConsignments();
   restoreLegacyJobMovements();
   saveAppState({ dispatch: false });
