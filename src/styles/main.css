@@ -573,3 +573,11 @@ h3 { font-weight: 700; }
 .job-status-cotizacion { color:#2456a6; background:#eaf2ff; }
 .job-status-pendiente { color:#8a5a08; background:#fff3d9; }
 .job-status-realizado { color:#187346; background:#e5f7ed; }
+
+/* Registro de filamentos por color y consumo importado */
+.filament-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.filament-import { display:inline-flex; align-items:center; cursor:pointer; }
+.filament-row { display:grid; grid-template-columns:minmax(180px,1.5fr) minmax(120px,1fr) minmax(100px,.7fr) auto; gap:10px; align-items:end; padding:12px; margin:8px 0; border:1px solid var(--border,#e5eaf3); border-radius:10px; background:var(--surface-soft,#f8fafc); }
+.filament-row small { grid-column:1/-1; color:var(--muted,#68758c); font-size:11px; }
+.filament-row .job-field { min-width:0; }
+@media(max-width:680px) { .filament-row { grid-template-columns:1fr 1fr; } .filament-row .job-field:first-child { grid-column:1/-1; } .filament-row small { grid-column:1/-1; } }
