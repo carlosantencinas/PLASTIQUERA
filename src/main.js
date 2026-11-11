@@ -7,11 +7,13 @@ import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
 
+const brandLogoUrl = import.meta.env.BASE_URL + 'imagotipo.svg';
+const brandIconUrl = import.meta.env.BASE_URL + 'isotipo.svg';
 const app = document.querySelector('#app');
 app.innerHTML = `
   <section id="auth-screen" class="auth-screen" hidden>
     <form id="login-form" class="auth-card">
-      <div class="auth-brand">A<span class="auth-brand-accent">3</span></div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Agencia de Modelos 3D</h1>
+      <img class="auth-logo" src="${brandLogoUrl}" alt="Agencia de Modelos 3D" /><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Agencia de Modelos 3D</h1>
       <p class="auth-description">Inicia sesión con la cuenta autorizada del taller.</p>
       <label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label>
       <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
@@ -22,7 +24,7 @@ app.innerHTML = `
   </section>
   <div class="app-shell" id="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="#inicio" aria-label="Agencia de Modelos 3D inicio"><span class="brand-mark">A<span>3</span></span><span class="brand-name"><strong>AM3D</strong><small>Agencia de Modelos 3D</small></span></a>
+      <a class="brand" href="#inicio" aria-label="Agencia de Modelos 3D inicio"><img class="brand-logo" src="${brandLogoUrl}" alt="Agencia de Modelos 3D" /></a>
       <p class="nav-caption">GESTIÓN</p>
       <nav class="navigation" aria-label="Navegación principal">
         <a class="nav-link" href="#inicio"><span>▦</span> Panel principal</a>
@@ -40,7 +42,7 @@ app.innerHTML = `
     <main class="main-content">
       <header class="topbar">
         <div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Panel principal</h1></div>
-        <div class="user-chip"><span class="avatar">A3</span><span id="user-email">AM3D</span><button id="logout-button" class="management-link" hidden type="button">Cerrar sesión</button></div>
+        <div class="user-chip"><img class="avatar-logo" src="${brandIconUrl}" alt="" /><span id="user-email">AM3D</span><button id="logout-button" class="management-link" hidden type="button">Cerrar sesión</button></div>
       </header>
       <section id="jobs-root" hidden></section>
       <section id="inventory-root" hidden></section>
@@ -130,7 +132,7 @@ async function initializeUserSession(user) {
     cloudSyncEnabled=true;
     setStatus(remote.exists
       ? 'Conectado. Los cambios de otros dispositivos se reflejarán automáticamente.'
-      : 'Base de Plastiquería creada en Firestore. Sincronización en tiempo real activa.',
+      : 'Base de Agencia de Modelos 3D creada en Firestore. Sincronización en tiempo real activa.',
       'Tiempo real activo',true);
     unsubscribeCloud=subscribeSharedState(({data})=>{
       if(!cloudSyncEnabled) return;
@@ -151,7 +153,7 @@ async function initializeUserSession(user) {
   } catch(error) {
     cloudSyncEnabled=false;
     console.error(error);
-    document.querySelector('.auth-description').textContent='No se pudo conectar con la base de datos de Plastiquería.';
+    document.querySelector('.auth-description').textContent='No se pudo conectar con la base de datos de Agencia de Modelos 3D.';
     document.querySelector('#login-error').textContent=error.message||'Error al leer Firestore. Comprueba las reglas y vuelve a intentar.';
     appShell.hidden=true;
     authScreen.hidden=false;
@@ -209,7 +211,7 @@ if(isFirebaseConfigured) {
       appShell.hidden=true;
       authScreen.hidden=false;
       document.querySelector('#logout-button').hidden=true;
-      document.querySelector('#user-email').textContent='Plastiquería';
+      document.querySelector('#user-email').textContent='AM3D';
     }
   });
 } else {
@@ -217,14 +219,14 @@ if(isFirebaseConfigured) {
   appShell.hidden=true;
   authScreen.hidden=false;
   document.querySelector('#login-form').hidden=true;
-  document.querySelector('.auth-description').textContent='Firebase es obligatorio para utilizar Plastiquería. Configura las credenciales de conexión para continuar.';
+  document.querySelector('.auth-description').textContent='Firebase es obligatorio para utilizar Agencia de Modelos 3D. Configura las credenciales de conexión para continuar.';
   document.querySelector('#login-error').textContent=getFirebaseStatus().message;
 }
 
 if('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register(import.meta.env.BASE_URL+'sw.js').catch(error=>{
-      console.warn('No se pudo activar el modo instalable/offline de Plastiquería:',error);
+      console.warn('No se pudo activar el modo instalable/offline de Agencia de Modelos 3D:',error);
     });
   });
 }
