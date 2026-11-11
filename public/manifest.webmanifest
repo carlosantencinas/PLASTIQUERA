@@ -1,13 +1,13 @@
 {
-  "name": "Plastiquería",
-  "short_name": "Plastiquería",
+  "name": "Agencia de Modelos 3D",
+  "short_name": "Agencia de Modelos 3D",
   "description": "Sistema de gestión para taller de impresión 3D.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#111827",
+  "background_color": "#ffffff",
+  "theme_color": "#171717",
   "icons": [
     {
       "src": "./icon.svg",
