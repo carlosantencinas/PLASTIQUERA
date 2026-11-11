@@ -167,7 +167,7 @@ function printProductionLabels(selectedJobs) {
     return;
   }
   popup.document.open();
-  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas de producción - Plastiquería</title>
+  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas de producción - Agencia de Modelos 3D</title>
     <style>
       @page { size:auto; margin:8mm; }
       * { box-sizing:border-box; }
@@ -181,7 +181,7 @@ function printProductionLabels(selectedJobs) {
     </style></head><body><div class="labels">${labels.map((item,index) => `
       <div class="label"><div class="name">${escapeText(item.job.data.nombre)}</div>
       <svg id="production-barcode-${index}"></svg>
-      <div class="client">${escapeText(item.job.data.cliente || 'Producción Plastiquería')}</div>
+      <div class="client">${escapeText(item.job.data.cliente || 'Producción AM3D')}</div>
       <div class="piece">Pieza ${item.piece} de ${item.quantity}</div>
       <div class="code">${escapeText(item.code)}</div></div>`).join('')}</div></body></html>`);
   popup.document.close();
@@ -201,14 +201,40 @@ function renderHistory() {
   if (!jobs.length) {
     return '<div class="job-empty"><strong>Aún no hay trabajos</strong><span>Completa el formulario para registrar el primero.</span></div>';
   }
+  const colorNames = {
+    rojo:'#e53935', red:'#e53935', amarillo:'#fdd835', yellow:'#fdd835',
+    negro:'#202124', black:'#202124', blanco:'#ffffff', white:'#ffffff',
+    azul:'#2878d0', blue:'#2878d0', verde:'#269b62', green:'#269b62',
+    naranja:'#f28c28', orange:'#f28c28', morado:'#8e55b8', purple:'#8e55b8',
+    rosa:'#e879a8', pink:'#e879a8', gris:'#8b929e', gray:'#8b929e', grey:'#8b929e',
+    plateado:'#b9c0ca', silver:'#b9c0ca', dorado:'#c9a227', gold:'#c9a227',
+  };
   return `
     <div class="job-table-scroll"><table class="job-table">
-      <thead><tr><th>Trabajo</th><th>Estado</th><th>Fecha</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr></thead>
-      <tbody>${[...jobs].sort((a,b) => b.data.fecha - a.data.fecha).map(job => `
+      <thead><tr><th>Trabajo</th><th>Estado</th><th>Fecha</th><th>Filamento utilizado</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr></thead>
+      <tbody>${[...jobs].sort((a,b) => b.data.fecha - a.data.fecha).map(job => {
+        const materials = Array.isArray(job.data.materiales) && job.data.materiales.length
+          ? job.data.materiales.filter(item => Number(item.gramos) > 0)
+          : (Number(job.data.gramos) > 0 ? [{ gramos:job.data.gramos, color:job.data.materialNombre || '', materialId:job.data.materialId }] : []);
+        const totalGrams = Number(job.data.gramos) || materials.reduce((sum,item) => sum + Number(item.gramos || 0),0);
+        const uniqueColors = [];
+        materials.forEach(item => {
+          const label = String(item.color || getMaterialById(item.materialId)?.nombre || '').trim();
+          const key = label.toLowerCase();
+          if (label && !uniqueColors.some(color => color.key === key)) {
+            const hex = label.match(/#[0-9a-f]{3,8}\b/i)?.[0];
+            const namedColor = colorNames[label.toLowerCase()];
+            uniqueColors.push({key,label,swatch:hex || namedColor || '#d5dbe5'});
+          }
+        });
+        return `
         <tr>
           <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
           <td><span class="job-status job-status-${escapeText(job.data.estadoTrabajo || 'realizado')}">${({cotizacion:'Cotización',pendiente:'Pendiente',realizado:'Realizado'})[job.data.estadoTrabajo || 'realizado']}</span></td>
           <td>${new Date(job.data.fecha).toLocaleDateString('es-BO')}</td>
+          <td><div class="job-filament-summary"><strong>${totalGrams > 0 ? totalGrams.toLocaleString('es-BO',{maximumFractionDigits:1}) + ' g' : '—'}</strong>
+            <div class="job-filament-colors" aria-label="Colores de filamento">${uniqueColors.length ? uniqueColors.map((color,index) => `<span class="job-filament-color" style="--filament-color:${color.swatch}" title="${escapeText(color.label)}" aria-label="${escapeText(color.label)}"></span>`).join('') : '<span class="job-filament-no-color">Sin color indicado</span>'}</div>
+          </div></td>
           <td>${money(job.calc.costoTotal)}</td>
           <td class="job-highlight">${money(job.calc.precioVenta)}</td>
           <td>${money(job.calc.ganancia)}</td>
@@ -218,12 +244,11 @@ function renderHistory() {
             <button type="button" data-edit="${job.id}" class="job-action">Editar</button>
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
-        </tr>
-      `).join('')}</tbody>
+        </tr>`;
+      }).join('')}</tbody>
     </table></div>
   `;
 }
-
 function escapeText(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -282,7 +307,7 @@ function openQuote(job) {
   <table><thead><tr><th>Detalle</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
   <tbody><tr><td><div class="item-title">${escapeText(data.nombre)}</div>${data.descripcion ? `<div class="muted" style="margin-top:5px">${escapeText(data.descripcion)}</div>` : ''}</td><td>${quantity}</td><td>${money(unitPrice)}</td><td>${money(calc.precioVenta)}</td></tr></tbody></table>
   <div class="total"><div><span>TOTAL DE LA COTIZACIÓN</span><strong>${money(calc.precioVenta)}</strong></div></div>
-  <footer class="thanks">Gracias por considerar a PLASTIQUERÍA para su proyecto.</footer>
+  <footer class="thanks">Gracias por considerar a AGENCIA DE MODELOS 3D para su proyecto.</footer>
 </main>
 </body></html>`);
   popup.document.close();
