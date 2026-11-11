@@ -643,3 +643,70 @@ h3 { font-weight: 700; }
   .brand-name strong { font-size:18px; }
   .brand-name small { font-size:8px; }
 }
+
+
+/* Identidad visual AM3D: colores y logotipos oficiales */
+:root {
+  color-scheme: light;
+  color: #1D1D1B;
+  background: #ffffff;
+  --accent: #E30613;
+  --accent-soft: #fff2f2;
+  --surface: #ffffff;
+  --surface-2: #fffdf2;
+  --muted: #5c5c5c;
+  --line: #e8e5dd;
+}
+body { color:#1D1D1B; background:#ffffff; }
+.sidebar { background:#ffffff; border-right-color:#e8e5dd; }
+.brand { padding-bottom:32px; }
+.brand-logo { display:block; width:100%; max-width:205px; height:auto; object-fit:contain; }
+.auth-screen { background:#ffffff; }
+.auth-card {
+  background:#ffffff;
+  color:#1D1D1B;
+  border:1px solid #e8e5dd;
+  box-shadow:0 18px 55px #1d1d1b12;
+}
+.auth-logo { display:block; width:min(100%,270px); height:auto; margin:0 auto 8px; }
+.auth-card h1 { color:#1D1D1B; font-size:24px; text-align:center; }
+.auth-card .eyebrow { color:#E30613; text-align:center; }
+.auth-description,.auth-card small { color:#5c5c5c; }
+.auth-card label { color:#1D1D1B; }
+.auth-card input { background:#fff; color:#1D1D1B; border-color:#d8d5cd; }
+.auth-card input:focus { border-color:#E30613; box-shadow:0 0 0 3px #E306131a; }
+.auth-card button,.job-save,.inventory-primary,.management-button {
+  background:#E30613;
+  color:#ffffff;
+  box-shadow:0 4px 12px #E3061325;
+}
+.auth-card button:hover,.job-save:hover,.inventory-primary:hover,.management-button:hover { background:#bd0610; }
+.management-button.secondary { background:#fffbea; color:#1D1D1B; border:1px solid #ffed00; }
+.nav-link { color:#1D1D1B; }
+.nav-link:hover,.nav-link.active { color:#1D1D1B; background:#fffbea; }
+.nav-link.active { box-shadow:inset 3px 0 #E30613; }
+.nav-link.active span { color:#E30613; }
+.nav-link:nth-child(n) span { color:#1D1D1B; background:#fff4a8; }
+.nav-link:nth-child(2) span,.nav-link:nth-child(6) span { color:#E30613; background:#ffe1e3; }
+.nav-link:nth-child(n):hover span,.nav-link:nth-child(n).active span { color:#E30613; background:#ffed00; }
+.nav-link:nth-child(n):hover,.nav-link:nth-child(n).active { color:#1D1D1B; background:#fffbea; border-color:#ffed00; box-shadow:inset 3px 0 #E30613; }
+.avatar-logo { display:block; width:34px; height:27px; object-fit:contain; }
+.eyebrow,.nav-caption { color:#5c5c5c; }
+.welcome { border-color:#ffed00; background:linear-gradient(112deg,#fffbea 0%,#ffffff 65%); }
+.welcome .eyebrow { color:#E30613; }
+.jobs-subheading,.inventory-category { color:#E30613; }
+.job-price-preview strong,.job-table .job-highlight { color:#E30613; }
+.job-field input:focus,.job-field select:focus,.job-field textarea:focus,
+.inventory-field input:focus,.inventory-field select:focus,.inventory-field textarea:focus,
+.management-field input:focus,.management-field select:focus,.management-field textarea:focus,
+.management-search:focus { border-color:#E30613; box-shadow:0 0 0 3px #E306131a; }
+.job-action:hover,.management-link:hover { border-color:#E30613; color:#E30613; }
+.jobs-count,.jobs-local-tag,.inventory-local-tag { color:#1D1D1B; background:#fffbea; border-color:#ffed00; }
+.job-status-cotizacion { color:#1D1D1B; background:#fffbea; border:1px solid #ffed00; }
+.job-status-pendiente { color:#8a5a08; background:#fff8df; }
+.job-status-realizado { color:#1D1D1B; background:#f3f3ef; border:1px solid #d8d5cd; }
+.page-footer { color:#5c5c5c; border-top-color:#e8e5dd; }
+@media(max-width:700px) {
+  .brand-logo { max-width:190px; }
+  .auth-logo { width:min(100%,235px); }
+}
