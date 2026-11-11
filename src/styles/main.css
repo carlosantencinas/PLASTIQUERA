@@ -581,3 +581,65 @@ h3 { font-weight: 700; }
 .filament-row small { grid-column:1/-1; color:var(--muted,#68758c); font-size:11px; }
 .filament-row .job-field { min-width:0; }
 @media(max-width:680px) { .filament-row { grid-template-columns:1fr 1fr; } .filament-row .job-field:first-child { grid-column:1/-1; } .filament-row small { grid-column:1/-1; } }
+
+
+/* Identidad AM3D: rojo, amarillo y negro sobre fondo blanco */
+:root {
+  --accent:#e52421;
+  --accent-soft:#fff1ef;
+}
+.brand { gap:10px; padding-bottom:32px; }
+.brand-mark {
+  position:relative;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  color:#fff;
+  background:#171717;
+  font:900 25px 'Space Grotesk',sans-serif;
+  box-shadow:0 5px 12px #17171724;
+}
+.brand-mark span {
+  position:absolute;
+  right:4px;
+  top:2px;
+  color:#ffd329;
+  font-size:12px;
+  line-height:1;
+}
+.brand-name { display:flex; flex-direction:column; gap:1px; line-height:1.1; }
+.brand-name strong { color:#171717; font-size:20px; letter-spacing:.2px; }
+.brand-name small { color:#5b6472; font-size:9px; font-weight:700; letter-spacing:.1px; white-space:nowrap; }
+.auth-brand {
+  color:#ffd329;
+  background:#171717;
+  position:relative;
+}
+.auth-brand-accent { color:#e52421; }
+.job-save,.inventory-primary,.management-button {
+  background:linear-gradient(135deg,#e52421,#b91518);
+  box-shadow:0 5px 13px #e524212b;
+}
+.jobs-subheading { color:#c51d1d; }
+.job-price-preview strong,.job-breakdown .job-breakdown-total b,.job-table .job-highlight { color:#d51f22; }
+.job-filament-summary { display:grid; gap:6px; min-width:100px; }
+.job-filament-summary > strong { color:#172238; font-size:13px; font-weight:800; }
+.job-filament-colors { display:flex; align-items:center; flex-wrap:wrap; gap:5px; min-height:15px; }
+.job-filament-color {
+  display:inline-block;
+  width:15px;
+  height:15px;
+  border-radius:50%;
+  background:var(--filament-color,#d5dbe5);
+  border:1px solid #aeb7c5;
+  box-shadow:0 0 0 1px #fff inset;
+}
+.job-filament-no-color { color:#778397; font-size:10px; font-weight:500; }
+.job-table { min-width:900px; }
+@media(max-width:700px) {
+  .brand { padding-bottom:14px; }
+  .brand-name strong { font-size:18px; }
+  .brand-name small { font-size:8px; }
+}
