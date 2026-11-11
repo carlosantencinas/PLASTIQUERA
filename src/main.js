@@ -13,7 +13,7 @@ const app = document.querySelector('#app');
 app.innerHTML = `
   <section id="auth-screen" class="auth-screen" hidden>
     <form id="login-form" class="auth-card">
-      <img class="auth-logo" src="${brandLogoUrl}" alt="Agencia de Modelos 3D" /><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Agencia de Modelos 3D</h1>
+      <img class="auth-logo" src="${brandLogoUrl}" alt="Agencia de Modelos 3D" /><p class="eyebrow">ACCESO AL TALLER</p><h1>Iniciar sesión</h1>
       <p class="auth-description">Inicia sesión con la cuenta autorizada del taller.</p>
       <label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label>
       <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
