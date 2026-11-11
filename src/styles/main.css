@@ -781,3 +781,58 @@ body { background: #f5f5f2; }
   .jobs-layout { gap: 12px; }
   .jobs-card { padding: 14px; }
 }
+
+
+/* AM3D · Barra lateral negra */
+@media (min-width: 701px) {
+  .sidebar {
+    background: #1D1D1B;
+    border-right: 1px solid #33332f;
+    box-shadow: 5px 0 18px rgba(0,0,0,.08);
+  }
+  .sidebar .brand {
+    background: #ffffff;
+    border: 1px solid #ffed00;
+    border-radius: 12px;
+    padding: 12px 9px;
+    margin: 0 0 27px;
+  }
+  .sidebar .brand-logo { max-width: 100%; }
+  .sidebar .nav-caption { color: #b8b8b2; }
+  .sidebar .nav-link {
+    color: #f2f2ed;
+    background: transparent;
+    border-color: transparent;
+  }
+  .sidebar .nav-link span {
+    color: #1D1D1B;
+    background: #ffed00;
+  }
+  .sidebar .nav-link:nth-child(2) span,
+  .sidebar .nav-link:nth-child(6) span {
+    color: #ffffff;
+    background: #E30613;
+  }
+  .sidebar .nav-link:hover,
+  .sidebar .nav-link.active {
+    color: #1D1D1B;
+    background: #ffed00;
+    border-color: #ffed00;
+    box-shadow: inset 4px 0 #E30613;
+  }
+  .sidebar .nav-link:hover span,
+  .sidebar .nav-link.active span {
+    color: #ffffff;
+    background: #E30613;
+  }
+  .sidebar .sidebar-footer {
+    color: #c4c4bd;
+    border-top-color: #44443e;
+  }
+}
+@media (max-width: 700px) {
+  .sidebar { background: #1D1D1B; border-bottom: 1px solid #33332f; }
+  .sidebar .brand { background: #ffffff; border: 1px solid #ffed00; border-radius: 10px; padding: 9px; }
+  .sidebar .nav-link { color: #f2f2ed; background: #292925; border-color: #44443e; }
+  .sidebar .nav-link.active { color: #1D1D1B; background: #ffed00; border-color: #ffed00; }
+}
