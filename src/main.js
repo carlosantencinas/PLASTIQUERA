@@ -11,7 +11,7 @@ const app = document.querySelector('#app');
 app.innerHTML = `
   <section id="auth-screen" class="auth-screen" hidden>
     <form id="login-form" class="auth-card">
-      <div class="auth-brand">P</div><p class="eyebrow">ACCESO AL TALLER</p><h1>Plastiquería</h1>
+      <div class="auth-brand">A<span class="auth-brand-accent">3</span></div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Agencia de Modelos 3D</h1>
       <p class="auth-description">Inicia sesión con la cuenta autorizada del taller.</p>
       <label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label>
       <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
@@ -22,7 +22,7 @@ app.innerHTML = `
   </section>
   <div class="app-shell" id="app-shell">
     <aside class="sidebar">
-      <a class="brand" href="#inicio" aria-label="Plastiquería inicio"><span class="brand-mark">P</span><span>Plastiquería</span></a>
+      <a class="brand" href="#inicio" aria-label="Agencia de Modelos 3D inicio"><span class="brand-mark">A<span>3</span></span><span class="brand-name"><strong>AM3D</strong><small>Agencia de Modelos 3D</small></span></a>
       <p class="nav-caption">GESTIÓN</p>
       <nav class="navigation" aria-label="Navegación principal">
         <a class="nav-link" href="#inicio"><span>▦</span> Panel principal</a>
@@ -39,14 +39,14 @@ app.innerHTML = `
     </aside>
     <main class="main-content">
       <header class="topbar">
-        <div><p class="eyebrow">TALLER DE IMPRESIÓN 3D</p><h1>Panel principal</h1></div>
-        <div class="user-chip"><span class="avatar">P</span><span id="user-email">Plastiquería</span><button id="logout-button" class="management-link" hidden type="button">Cerrar sesión</button></div>
+        <div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Panel principal</h1></div>
+        <div class="user-chip"><span class="avatar">A3</span><span id="user-email">AM3D</span><button id="logout-button" class="management-link" hidden type="button">Cerrar sesión</button></div>
       </header>
       <section id="jobs-root" hidden></section>
       <section id="inventory-root" hidden></section>
       <section id="management-root"></section>
       <section class="connection-panel"><div><p class="eyebrow">SERVICIOS</p><h2>Estado de almacenamiento</h2><p id="firebase-status"></p></div><span id="firebase-indicator" class="connection-indicator"></span></section>
-      <footer class="page-footer">Plastiquería <span>·</span> Sistema de gestión para impresión 3D</footer>
+      <footer class="page-footer">Agencia de Modelos 3D <span>·</span> Sistema de gestión para impresión 3D</footer>
     </main>
   </div>`;
 const authScreen=document.querySelector('#auth-screen');
