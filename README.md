@@ -1,4 +1,4 @@
-# Plastiquería
+# Agencia de Modelos 3D (AM3D)
 
 Aplicación web para administrar un taller de impresión 3D. Es un repositorio independiente: **3DBoys permanece intacto**.
 
@@ -23,7 +23,7 @@ La importación reemplaza los datos locales actuales. Antes de importar, descarg
 
 La aplicación incorpora acceso por correo/contraseña (sin registro público) y sincronización opcional con el documento compartido `talleres3dboys/principal`.
 
-Se conservan los campos legados `jobs`, `materials`, `purchases`, `sales`, `productos`, `clientes` y `consignaciones`. Plastiquería añade `jobMovements` para registrar consumos de material por trabajo. Al importar datos antiguos, reconstruye los movimientos históricos a partir de los trabajos y materiales para evitar volver a descontar el mismo consumo al editarlos.
+Se conservan los campos legados `jobs`, `materials`, `purchases`, `sales`, `productos`, `clientes` y `consignaciones`. Agencia de Modelos 3D añade `jobMovements` para registrar consumos de material por trabajo. Al importar datos antiguos, reconstruye los movimientos históricos a partir de los trabajos y materiales para evitar volver a descontar el mismo consumo al editarlos.
 
 La sincronización usa transacciones y compara las listas con la última lectura. Si detecta cambios externos —incluidos cambios realizados desde 3DBoys u otra sesión— detiene la escritura para evitar sobrescribirlos. Los cambios se guardan primero en el navegador; si falla la nube, los datos locales se conservan. Si hay datos locales y remotos, la aplicación solicita elegir qué fuente utilizar.
 
