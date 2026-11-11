@@ -176,7 +176,7 @@ function attachBackup(root) {
   root.querySelector('#backup-export').addEventListener('click',exportBackup);
   root.querySelector('#backup-import').addEventListener('change',async e=>{
     const file=e.target.files?.[0]; if(!file)return;
-    if(!confirm('La importación reemplazará todos los datos actuales de Plastiquería en Firebase. ¿Continuar?')){e.target.value='';return;}
+    if(!confirm('La importación reemplazará todos los datos actuales de Agencia de Modelos 3D en Firebase. ¿Continuar?')){e.target.value='';return;}
     try{await importBackup(file);notify('Respaldo importado correctamente.');renderManagementView(root,active);}catch(error){alert(error.message);}
   });
 }
