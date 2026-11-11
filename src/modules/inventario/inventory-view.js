@@ -42,7 +42,7 @@ function printBarcodeLabels(items) {
     window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para esta página.');
     return;
   }
-  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas - Plastiquería</title>
+  printWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas - Agencia de Modelos 3D</title>
     <style>
       @page { size: auto; margin: 8mm; }
       * { box-sizing: border-box; }
