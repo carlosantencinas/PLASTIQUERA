@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plastiqueria-shell-v2';
+const CACHE_NAME = 'am3d-shell-v3';
 const APP_ROOT = '/PLASTIQUERA/';
 
 self.addEventListener('install', event => {
@@ -12,7 +12,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key.startsWith('plastiqueria-') && key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(key => key.startsWith('am3d-') && key !== CACHE_NAME).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
