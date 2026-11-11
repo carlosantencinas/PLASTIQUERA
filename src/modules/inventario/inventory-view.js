@@ -37,6 +37,7 @@ function printBarcodeLabels(items) {
     window.alert('No hay materiales para etiquetar.');
     return;
   }
+  const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
   const printWindow = window.open('', '_blank', 'width=900,height=700');
   if (!printWindow) {
     window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para esta página.');
@@ -47,13 +48,15 @@ function printBarcodeLabels(items) {
       @page { size: auto; margin: 8mm; }
       * { box-sizing: border-box; }
       body { margin: 0; padding: 0; font: 10px Arial, sans-serif; color: #111; }
+      .print-brand { display:flex; justify-content:center; margin:0 auto 7mm; }
+      .print-brand img { display:block; width:58mm; max-height:24mm; object-fit:contain; }
       .labels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
       .label { min-height: 32mm; border: 1px dashed #bbb; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; break-inside: avoid; text-align: center; }
       .name { font-size: 11px; font-weight: bold; margin-bottom: 1mm; max-width: 100%; overflow-wrap: anywhere; }
       .meta { font-size: 8px; color: #444; margin-top: 1mm; }
       svg { max-width: 100%; height: auto; }
       @media screen { body { padding: 12px; } .labels { max-width: 800px; margin: auto; } }
-    </style></head><body><div class="labels">${items.map((item, index) => `
+    </style></head><body><header class="print-brand"><img src="${brandLogoUrl}" alt="Agencia de Modelos 3D"></header><div class="labels">${items.map((item, index) => `
       <div class="label"><div class="name">${escapeText(item.nombre)}</div>
       <svg id="barcode-${index}"></svg>
       <div class="meta">${escapeText(item.categoria)} · ${escapeText(barcodeValue(item))}</div></div>`).join('')}</div></body></html>`);
