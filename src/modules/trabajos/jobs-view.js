@@ -161,6 +161,7 @@ function printProductionLabels(selectedJobs) {
     window.alert('No hay piezas vendibles para generar etiquetas de producción.');
     return;
   }
+  const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
   const popup = window.open('', '_blank', 'width=900,height=700');
   if (!popup) {
     window.alert('El navegador bloqueó la ventana de etiquetas. Permite las ventanas emergentes para este sitio.');
@@ -172,13 +173,15 @@ function printProductionLabels(selectedJobs) {
       @page { size:auto; margin:8mm; }
       * { box-sizing:border-box; }
       body { margin:0; padding:0; color:#111; font:10px Arial,sans-serif; }
-      .labels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5mm; }
+      .print-brand { display:flex; justify-content:center; margin:0 auto 7mm; }
+      .print-brand img { display:block; width:58mm; max-height:24mm; object-fit:contain; }
+       .labels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5mm; }
       .label { min-height:34mm; padding:3mm; border:1px dashed #aaa; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; break-inside:avoid; }
       .name { max-width:100%; margin-bottom:1mm; font-size:11px; font-weight:bold; overflow-wrap:anywhere; }
       .client,.piece,.code { margin-top:1mm; font-size:8px; color:#333; }
       svg { max-width:100%; height:auto; }
       @media screen { body { padding:12px; } .labels { max-width:800px; margin:auto; } }
-    </style></head><body><div class="labels">${labels.map((item,index) => `
+    </style></head><body><header class="print-brand"><img src="${brandLogoUrl}" alt="Agencia de Modelos 3D"></header><div class="labels">${labels.map((item,index) => `
       <div class="label"><div class="name">${escapeText(item.job.data.nombre)}</div>
       <svg id="production-barcode-${index}"></svg>
       <div class="client">${escapeText(item.job.data.cliente || 'Producción AM3D')}</div>
@@ -271,6 +274,7 @@ function openQuote(job) {
   const unitPrice = quantity > 1 ? calc.precioUnitario : calc.precioVenta;
   const date = new Date(data.fecha || Date.now()).toLocaleDateString('es-BO');
   const reference = `COT-${new Date(data.fecha || Date.now()).getFullYear()}-${String(job.id).slice(-6).toUpperCase()}`;
+  const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
   popup.document.open();
   popup.document.write(`<!doctype html>
 <html lang="es">
@@ -287,11 +291,11 @@ function openQuote(job) {
   .box strong{font-size:14px}.description{margin:24px 0;color:#46536a;line-height:1.6;white-space:pre-wrap}
   table{width:100%;border-collapse:collapse;margin-top:26px}th{padding:12px;text-align:left;background:#f3f6fc;color:#68758c;font-size:11px;text-transform:uppercase}
   td{padding:15px 12px;border-bottom:1px solid #e5eaf3;vertical-align:top}th:last-child,td:last-child{text-align:right;white-space:nowrap}
-  .item-title{font-weight:700}.total{display:flex;justify-content:flex-end;margin-top:18px}.total div{width:260px;padding:17px;background:#fff4ed;border-radius:8px}
-  .total span{display:block;color:#68758c;font-size:11px}.total strong{display:block;margin-top:6px;color:#e95a27;font-size:25px}
+  .item-title{font-weight:700}.total{display:flex;justify-content:flex-end;margin-top:18px}.total div{width:260px;padding:17px;background:#fffbea;border:1px solid #ffed00;border-radius:8px}
+  .total span{display:block;color:#68758c;font-size:11px}.total strong{display:block;margin-top:6px;color:#E30613;font-size:25px}
   .thanks{margin-top:48px;padding-top:17px;border-top:1px solid #e5eaf3;text-align:center;color:#68758c;font-size:12px}
   .toolbar{max-width:760px;margin:0 auto 22px;display:flex;justify-content:flex-end;gap:8px}
-  .toolbar button{padding:10px 16px;border:0;border-radius:6px;background:#ff6b35;color:#fff;font-weight:700;cursor:pointer}
+  .toolbar button{padding:10px 16px;border:0;border-radius:6px;background:#E30613;color:#fff;font-weight:700;cursor:pointer}
   .toolbar button:last-child{background:#edf1f7;color:#46536a}
   @media print{body{padding:0}.toolbar{display:none}.sheet{max-width:none}.box,.total div{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
   @page{size:A4;margin:18mm}
@@ -300,7 +304,7 @@ function openQuote(job) {
 <body>
 <div class="toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button><button onclick="window.close()">Cerrar</button></div>
 <main class="sheet">
-  <header class="top"><div><div class="brand">PLASTI<span>QUERÍA</span></div><div class="muted">Impresión 3D · Cotización</div></div><div style="text-align:right"><strong>${reference}</strong><div class="muted" style="margin-top:7px">${date}</div></div></header>
+  <header class="top"><div><img class="brand-logo" src="${brandLogoUrl}" alt="Agencia de Modelos 3D"><div class="muted">Impresión 3D · Cotización</div></div><div style="text-align:right"><strong>${reference}</strong><div class="muted" style="margin-top:7px">${date}</div></div></header>
   <h1>Cotización</h1><p class="muted">Propuesta económica para el trabajo solicitado.</p>
   <section class="meta"><div class="box"><small>Cliente</small><strong>${escapeText(data.cliente || 'Cliente')}</strong></div><div class="box"><small>Trabajo</small><strong>${escapeText(data.nombre)}</strong></div></section>
   ${data.descripcion ? `<p class="description">${escapeText(data.descripcion)}</p>` : ''}
