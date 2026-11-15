@@ -587,7 +587,7 @@ export function renderJobsView(container) {
     if (!field) return;
     historyFilters[field.dataset.historyFilter] = field.value;
     const key = field.dataset.historyFilter;
-    const selectionStart = field.selectionStart;
+    const selectionStart = field.type === 'search' ? field.selectionStart : null;
     history.innerHTML = renderHistory(historyFilters);
     const replacementField = history.querySelector('[data-history-filter="' + key + '"]');
     replacementField?.focus();
