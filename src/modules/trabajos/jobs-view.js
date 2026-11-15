@@ -200,7 +200,7 @@ function printProductionLabels(selectedJobs) {
   popup.setTimeout(() => popup.print(), 250);
 }
 
-function renderHistory() {
+function renderHistory(filters = {}) {
   if (!jobs.length) {
     return '<div class="job-empty"><strong>Aún no hay trabajos</strong><span>Completa el formulario para registrar el primero.</span></div>';
   }
@@ -212,10 +212,46 @@ function renderHistory() {
     rosa:'#e879a8', pink:'#e879a8', gris:'#8b929e', gray:'#8b929e', grey:'#8b929e',
     plateado:'#b9c0ca', silver:'#b9c0ca', dorado:'#c9a227', gold:'#c9a227',
   };
+  const statusLabels = { cotizacion:'Cotización', pendiente:'Pendiente', realizado:'Realizado' };
+  const normalized = value => String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().trim();
+  const matches = (value, filter) => !filter || normalized(value).includes(normalized(filter));
+  const filteredJobs = jobs.filter(job => {
+    const data = job.data || {};
+    const materials = Array.isArray(data.materiales) ? data.materiales : [];
+    const filamentText = materials.map(item => [item.color, getMaterialById(item.materialId)?.nombre].filter(Boolean).join(' ')).join(' ');
+    const date = new Date(data.fecha || job.createdAt || 0);
+    const dateValue = Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0,10);
+    return matches([data.nombre, data.cliente].join(' '), filters.trabajo)
+      && matches(statusLabels[data.estadoTrabajo || 'realizado'] || data.estadoTrabajo, filters.estado)
+      && matches(dateValue, filters.fecha)
+      && matches(filamentText || data.materialNombre || '', filters.filamento)
+      && matches(money(job.calc?.costoTotal), filters.costo)
+      && matches(money(job.calc?.precioVenta), filters.precio)
+      && matches(money(job.calc?.ganancia), filters.ganancia);
+  });
+  const filterInput = (key, placeholder, type = 'search') =>
+    '<input class="job-history-filter" type="' + type + '" data-history-filter="' + key + '" value="' + escapeText(filters[key] || '') + '" placeholder="' + placeholder + '" aria-label="Filtrar por ' + placeholder + '">';
   return `
     <div class="job-table-scroll"><table class="job-table">
-      <thead><tr><th>Trabajo</th><th>Estado</th><th>Fecha</th><th>Filamento utilizado</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr></thead>
-      <tbody>${[...jobs].sort((a,b) => b.data.fecha - a.data.fecha).map(job => {
+      <thead>
+        <tr><th>Trabajo</th><th>Estado</th><th>Fecha</th><th>Filamento utilizado</th><th>Costo</th><th>Precio sugerido</th><th>Ganancia</th><th></th></tr>
+        <tr class="job-history-filter-row">
+          <th>${filterInput('trabajo','Trabajo o cliente')}</th>
+          <th><select class="job-history-filter" data-history-filter="estado" aria-label="Filtrar por estado">
+            <option value="">Todos</option>
+            <option value="cotizacion" ${filters.estado === 'cotizacion' ? 'selected' : ''}>Cotización</option>
+            <option value="pendiente" ${filters.estado === 'pendiente' ? 'selected' : ''}>Pendiente</option>
+            <option value="realizado" ${filters.estado === 'realizado' ? 'selected' : ''}>Realizado</option>
+          </select></th>
+          <th>${filterInput('fecha','Fecha','date')}</th>
+          <th>${filterInput('filamento','Color o material')}</th>
+          <th>${filterInput('costo','Costo')}</th>
+          <th>${filterInput('precio','Precio')}</th>
+          <th>${filterInput('ganancia','Ganancia')}</th>
+          <th><button type="button" class="job-action" data-clear-history-filters>Limpiar</button></th>
+        </tr>
+      </thead>
+      <tbody>${[...filteredJobs].sort((a,b) => Number(b.createdAt || b.updatedAt || b.data.fecha || 0) - Number(a.createdAt || a.updatedAt || a.data.fecha || 0)).map(job => {
         const materials = Array.isArray(job.data.materiales) && job.data.materiales.length
           ? job.data.materiales.filter(item => Number(item.gramos) > 0)
           : (Number(job.data.gramos) > 0 ? [{ gramos:job.data.gramos, color:job.data.materialNombre || '', materialId:job.data.materialId }] : []);
@@ -225,7 +261,7 @@ function renderHistory() {
           const label = String(item.color || getMaterialById(item.materialId)?.nombre || '').trim();
           const key = label.toLowerCase();
           if (label && !uniqueColors.some(color => color.key === key)) {
-            const hex = label.match(/#[0-9a-f]{3,8}\b/i)?.[0];
+            const hex = label.match(/#[0-9a-f]{3,8}\\b/i)?.[0];
             const namedColor = colorNames[label.toLowerCase()];
             uniqueColors.push({key,label,swatch:hex || namedColor || '#d5dbe5'});
           }
@@ -233,10 +269,10 @@ function renderHistory() {
         return `
         <tr>
           <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
-          <td><span class="job-status job-status-${escapeText(job.data.estadoTrabajo || 'realizado')}">${({cotizacion:'Cotización',pendiente:'Pendiente',realizado:'Realizado'})[job.data.estadoTrabajo || 'realizado']}</span></td>
+          <td><span class="job-status job-status-${escapeText(job.data.estadoTrabajo || 'realizado')}">${statusLabels[job.data.estadoTrabajo || 'realizado'] || job.data.estadoTrabajo}</span></td>
           <td>${new Date(job.data.fecha).toLocaleDateString('es-BO')}</td>
           <td><div class="job-filament-summary"><strong>${totalGrams > 0 ? totalGrams.toLocaleString('es-BO',{maximumFractionDigits:1}) + ' g' : '—'}</strong>
-            <div class="job-filament-colors" aria-label="Colores de filamento">${uniqueColors.length ? uniqueColors.map((color,index) => `<span class="job-filament-color" style="--filament-color:${color.swatch}" title="${escapeText(color.label)}" aria-label="${escapeText(color.label)}"></span>`).join('') : '<span class="job-filament-no-color">Sin color indicado</span>'}</div>
+            <div class="job-filament-colors" aria-label="Colores de filamento">${uniqueColors.length ? uniqueColors.map(color => `<span class="job-filament-color" style="--filament-color:${color.swatch}" title="${escapeText(color.label)}" aria-label="${escapeText(color.label)}"></span>`).join('') : '<span class="job-filament-no-color">Sin color indicado</span>'}</div>
           </div></td>
           <td>${money(job.calc.costoTotal)}</td>
           <td class="job-highlight">${money(job.calc.precioVenta)}</td>
@@ -248,7 +284,7 @@ function renderHistory() {
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
         </tr>`;
-      }).join('')}</tbody>
+      }).join('') || '<tr><td colspan="8" class="job-history-empty">No hay registros que coincidan con estos filtros.</td></tr>'}</tbody>
     </table></div>
   `;
 }
@@ -398,6 +434,7 @@ export function renderJobsView(container) {
   const materialPrice = form.elements.precioKg;
   const filamentRoot = container.querySelector('#jobFilaments');
   const materialHelp = container.querySelector('#jobMaterialHelp');
+  const historyFilters = { trabajo:'', estado:'', fecha:'', filamento:'', costo:'', precio:'', ganancia:'' };
 
   function filamentRowMarkup(row = {}) {
     const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
@@ -459,8 +496,9 @@ export function renderJobsView(container) {
       <article><span>VENTAS REALIZADAS</span><strong>${money(revenue)}</strong></article>
       <article><span>GANANCIA PROYECTADA</span><strong>${money(profit)}</strong></article>
     `;
-    history.innerHTML = renderHistory();
-    container.querySelector('#jobsCount').textContent = `${count} ${count === 1 ? 'registro' : 'registros'}`;
+    history.innerHTML = renderHistory(historyFilters);
+    const visibleCount = [...history.querySelectorAll('tbody tr')].filter(row => !row.querySelector('.job-history-empty')).length;
+    container.querySelector('#jobsCount').textContent = visibleCount === count ? `${count} ${count === 1 ? 'registro' : 'registros'}` : `${visibleCount} de ${count} registros`;
   }
 
   window.addEventListener('appstate:loaded', refresh);
@@ -544,7 +582,33 @@ export function renderJobsView(container) {
 
   container.querySelector('#jobResetButton').addEventListener('click', reset);
 
+  history.addEventListener('input', event => {
+    const field = event.target.closest('[data-history-filter]');
+    if (!field) return;
+    historyFilters[field.dataset.historyFilter] = field.value;
+    const key = field.dataset.historyFilter;
+    const selectionStart = field.selectionStart;
+    history.innerHTML = renderHistory(historyFilters);
+    const replacementField = history.querySelector('[data-history-filter="' + key + '"]');
+    replacementField?.focus();
+    if (replacementField && typeof selectionStart === 'number') replacementField.setSelectionRange(selectionStart, selectionStart);
+    const visibleCount = [...history.querySelectorAll('tbody tr')].filter(row => !row.querySelector('.job-history-empty')).length;
+    container.querySelector('#jobsCount').textContent = `${visibleCount} de ${jobs.length} registros`;
+  });
+  history.addEventListener('change', event => {
+    const field = event.target.closest('[data-history-filter]');
+    if (!field) return;
+    historyFilters[field.dataset.historyFilter] = field.value;
+    history.innerHTML = renderHistory(historyFilters);
+    const visibleCount = [...history.querySelectorAll('tbody tr')].filter(row => !row.querySelector('.job-history-empty')).length;
+    container.querySelector('#jobsCount').textContent = `${visibleCount} de ${jobs.length} registros`;
+  });
   history.addEventListener('click', event => {
+    if (event.target.closest('[data-clear-history-filters]')) {
+      Object.keys(historyFilters).forEach(key => historyFilters[key] = '');
+      refresh();
+      return;
+    }
     const quoteButton = event.target.closest('[data-quote]');
     const productionLabel = event.target.closest('[data-production-label]');
     const printAllLabels = event.target.closest('[data-print-production-all]');
