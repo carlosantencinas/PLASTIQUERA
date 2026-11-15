@@ -1,4 +1,5 @@
 import { appState, saveAppState, exportBackup, importBackup, makeId } from '../../services/app-store.js';
+import { inventoryState } from '../../services/inventory-store.js';
 import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -28,21 +29,57 @@ function shell(section) {
 }
 
 function dashboard() {
-  const totalJobs=appState.jobs.length, totalSales=appState.sales.reduce((n,s)=>n+Number(s.monto||0),0);
-  const pending=appState.consignments.reduce((n,c)=>n+consignmentBalance(c).pending,0);
+  const completedJobs=appState.jobs.filter(job=>!job.data?.estadoTrabajo||job.data.estadoTrabajo==='realizado');
+  const totalJobs=appState.jobs.length;
+  const totalSales=appState.sales.reduce((n,s)=>n+Number(s.monto||0),0);
+  const pending=appState.consignments.reduce((n,item)=>n+consignmentBalance(item).pending,0);
   const sellable=appState.jobs.reduce((n,j)=>n+pieces(j),0);
-  return `<div class="management-stats">
-    <article><span>TRABAJOS</span><strong>${totalJobs}</strong></article>
-    <article><span>PRODUCTOS</span><strong>${appState.products.length}</strong></article>
-    <article><span>VENTAS REGISTRADAS</span><strong>${money(totalSales)}</strong></article>
-    <article><span>POR COBRAR EN CONSIGNACIÓN</span><strong>${money(pending)}</strong></article>
+  const printerHours=completedJobs.reduce((sum,job)=>sum+Math.max(0,Number(job.data?.horasImpresion||0)),0);
+  const usedGrams=inventoryState.jobMovements
+    .filter(movement=>completedJobs.some(job=>job.id===movement.jobId))
+    .reduce((sum,movement)=>sum+Math.max(0,Number(movement.grams||0)),0);
+  const formatDuration=hours=>{
+    const totalMinutes=Math.round(hours*60);
+    const days=Math.floor(totalMinutes/1440);
+    const h=Math.floor((totalMinutes%1440)/60);
+    const mins=totalMinutes%60;
+    return [days?days+' d':'',h? h+' h':'',mins?mins+' min':''].filter(Boolean).join(' ')||'0 min';
+  };
+  const filamentRows=inventoryState.materials
+    .filter(item=>item.categoria==='Filamento'||String(item.unidad).toLowerCase()==='g')
+    .sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre),'es'))
+    .map(item=>{
+      const color=String(item.nombre||'').match(/(?:PLA|PETG|ABS|ASA|TPU)?\\s*[-–]?\\s*(rojo|red|amarillo|yellow|negro|black|blanco|white|azul|blue|verde|green|naranja|orange|morado|purple|rosa|pink|gris|gray|grey|natural|transparente)/i)?.[1]||item.nombre;
+      const pct=Math.max(0,Math.min(100,Number(item.stock||0)/1000*100));
+      return {name:item.nombre,color,stock:Math.max(0,Number(item.stock||0)),pct};
+    });
+  const colorMap={rojo:'#e30613',red:'#e30613',amarillo:'#ffed00',yellow:'#ffed00',negro:'#1d1d1b',black:'#1d1d1b',blanco:'#fff',white:'#fff',azul:'#2878d0',blue:'#2878d0',verde:'#269b62',green:'#269b62',naranja:'#f28c28',orange:'#f28c28',morado:'#8e55b8',purple:'#8e55b8',rosa:'#e879a8',pink:'#e879a8',gris:'#9298a1',gray:'#9298a1',grey:'#9298a1'};
+  return `<div class="management-stats dashboard-production-stats">
+    <article><span>TRABAJOS TOTALES</span><strong>${totalJobs}</strong><small>${completedJobs.length} realizados</small></article>
+    <article><span>TIEMPO DE IMPRESIÓN</span><strong>${formatDuration(printerHours)}</strong><small>Acumulado de trabajos realizados</small></article>
+    <article><span>FILAMENTO UTILIZADO</span><strong>${usedGrams.toLocaleString('es-BO',{maximumFractionDigits:1})} g</strong><small>Consumo registrado en inventario</small></article>
+    <article><span>PIEZAS PRODUCIDAS</span><strong>${completedJobs.reduce((sum,job)=>sum+pieces(job),0)}</strong><small>Unidades de trabajos realizados</small></article>
+    <article><span>VENTAS REGISTRADAS</span><strong>${money(totalSales)}</strong><small>${appState.sales.length} operaciones</small></article>
+  </div>
+  <div class="management-card dashboard-filament-card">
+    <div class="dashboard-section-heading"><div><p class="eyebrow">MATERIALES</p><h3>Filamento restante por color</h3></div><span>${filamentRows.length} materiales</span></div>
+    ${filamentRows.length?`<div class="dashboard-filament-grid">${filamentRows.map(item=>{
+      const colorKey=String(item.color).toLowerCase();
+      const swatch=colorMap[colorKey]||'#c5c9d1';
+      return `<article class="dashboard-filament-item">
+        <span class="dashboard-filament-swatch" style="--swatch:${swatch}"></span>
+        <div class="dashboard-filament-info"><b>${esc(item.name)}</b><strong>${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})} g</strong>
+        <div class="dashboard-filament-track"><i style="width:${item.pct}%"></i></div><small>${item.stock<200?'Stock bajo':item.stock<500?'Reponer pronto':'En stock'}</small></div>
+      </article>`;
+    }).join('')}</div>`:'<p class="management-empty">No hay filamentos registrados en inventario. Registra compras de filamento para visualizar existencias por color.</p>'}
   </div>
   <div class="management-card"><h3>Resumen de operación</h3><div class="management-summary-grid">
     <div><span>Piezas vendibles registradas</span><b>${sellable}</b></div>
     <div><span>Clientes y tiendas</span><b>${appState.clients.length}</b></div>
     <div><span>Ventas registradas</span><b>${appState.sales.length}</b></div>
     <div><span>Entregas en consignación</span><b>${appState.consignments.length}</b></div>
-  </div><p class="management-help">El stock de productos se calcula a partir de piezas vendibles en trabajos, ventas directas y unidades que permanecen en tiendas. Las piezas devueltas se liberan nuevamente.</p></div>`;
+    <div><span>Por cobrar en consignación</span><b>${money(pending)}</b></div>
+  </div><p class="management-help">El tiempo se calcula con las horas de impresión registradas en cada trabajo realizado. El filamento utilizado se obtiene de los movimientos de consumo del inventario; los trabajos antiguos sin movimientos registrados no se estiman.</p></div>`;
 }
 
 function products() {
