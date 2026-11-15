@@ -261,17 +261,21 @@ export function renderInventoryView(container) {
     }
   });
 
+  materialsRoot.addEventListener('change', event => {
+    const colorInput = event.target.closest('[data-material-color]');
+    if (!colorInput) return;
+    const material = inventoryState.materials.find(item => item.id === colorInput.dataset.materialColor);
+    if (!material) return;
+    material.colorHex = colorInput.value;
+    saveAppState();
+    refresh();
+  });
+
   materialsRoot.addEventListener('click', event => {
     const label = event.target.closest('[data-print-label]');
     if (label) {
       const material = inventoryState.materials.find(item => item.id === label.dataset.printLabel);
       if (material) printBarcodeLabels([material]);
-      return;
-    }
-    const colorInput = event.target.closest('[data-material-color]');
-    if (colorInput) {
-      const material = inventoryState.materials.find(item => item.id === colorInput.dataset.materialColor);
-      if (material) { material.colorHex = colorInput.value; saveAppState(); refresh(); }
       return;
     }
     const adjust = event.target.closest('[data-adjust]');
