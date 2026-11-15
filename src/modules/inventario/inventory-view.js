@@ -80,13 +80,14 @@ function renderMaterials() {
   }
 
   return `<div class="inventory-table-wrap"><table class="inventory-table">
-    <thead><tr><th>Material</th><th>Categoría</th><th>Stock</th><th>Costo promedio</th><th>Valor en stock</th><th>Código</th><th></th></tr></thead>
+    <thead><tr><th>Material</th><th>Color</th><th>Categoría</th><th>Stock</th><th>Costo promedio</th><th>Valor en stock</th><th>Código</th><th></th></tr></thead>
     <tbody>${materials.map(item => {
       const lowLimit = item.unidad === 'g' || item.unidad === 'ml' ? 200 : 2;
       const low = item.stock < lowLimit;
       const unit = item.unidad === 'g' ? '/kg' : item.unidad === 'ml' ? '/L' : '/u';
       return `<tr>
         <td><strong>${escapeText(item.nombre)}</strong></td>
+        <td>${item.categoria==='Filamento'?`<label class="inventory-color-control" title="Color exacto del filamento"><input type="color" value="${/^#[0-9a-f]{6}$/i.test(String(item.colorHex||''))?item.colorHex:'#c5c9d1'}" data-material-color="${escapeText(item.id)}" aria-label="Definir color de ${escapeText(item.nombre)}"></label>`:'—'}</td>
         <td><span class="inventory-category">${escapeText(item.categoria)}</span></td>
         <td><span class="${low ? 'inventory-low' : ''}">${formatStock(item)}</span></td>
         <td>${money(formatUnitCost(item))}${unit}</td>
@@ -163,6 +164,7 @@ export function renderInventoryView(container) {
               </select>
             </label>
             <label class="inventory-field"><span>Nombre del material o equipo *</span><input name="name" required list="inventoryMaterialNames" placeholder="Ej. PLA Rojo 1.75 mm"><datalist id="inventoryMaterialNames"></datalist></label>
+            <label class="inventory-field" id="filamentColorField"><span>Color exacto del filamento</span><input name="colorHex" type="color" value="#c5c9d1"></label>
             <label class="inventory-field"><span>Cantidad comprada *</span><input name="quantity" type="number" min="0.01" step="any" required placeholder="1000"></label>
             <label class="inventory-field"><span>Unidad *</span>
               <select name="unit">
@@ -233,7 +235,9 @@ export function renderInventoryView(container) {
   window.addEventListener('appstate:loaded', refresh);
 
   form.elements.date.value = dateInput(Date.now());
+  container.querySelector('#filamentColorField').hidden = form.elements.category.value !== 'Filamento';
   form.elements.category.addEventListener('change', () => {
+    container.querySelector('#filamentColorField').hidden = form.elements.category.value !== 'Filamento';
     const defaults = { Filamento: 'g', Resina: 'ml', Insumo: 'unidad', Equipo: 'unidad' };
     form.elements.unit.value = defaults[form.elements.category.value] || 'unidad';
   });
@@ -262,6 +266,12 @@ export function renderInventoryView(container) {
     if (label) {
       const material = inventoryState.materials.find(item => item.id === label.dataset.printLabel);
       if (material) printBarcodeLabels([material]);
+      return;
+    }
+    const colorInput = event.target.closest('[data-material-color]');
+    if (colorInput) {
+      const material = inventoryState.materials.find(item => item.id === colorInput.dataset.materialColor);
+      if (material) { material.colorHex = colorInput.value; saveAppState(); refresh(); }
       return;
     }
     const adjust = event.target.closest('[data-adjust]');
