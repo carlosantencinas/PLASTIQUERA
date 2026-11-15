@@ -74,6 +74,7 @@ export function recordPurchase(data) {
     const quantityBase = normalizePurchaseQuantity(quantity, unit);
     const updated = weightedAverageEntry(material, quantityBase, totalPrice);
     Object.assign(material, updated);
+    if (category === 'Filamento' && /^#[0-9a-f]{6}$/i.test(String(data.colorHex || ''))) material.colorHex = data.colorHex;
   }
 
   return purchase;
