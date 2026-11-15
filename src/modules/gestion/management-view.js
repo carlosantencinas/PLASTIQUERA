@@ -50,6 +50,11 @@ function products() {
     <p class="management-help">Aquí aparecen los artículos terminados que tienen unidades disponibles. El stock se calcula con los trabajos asignados, las ventas y las entregas en consignación.</p>
     <div id="sellable-products-table" class="management-table-wrap"></div>
   </div>
+  <div class="management-card production-control-card">
+    <h3>Trabajos realizados · control de disponibilidad</h3>
+    <p class="management-help">Todos los trabajos realizados aparecen aquí, incluso si todavía no tienen producto o código asignado. Puedes vincularlos a un producto existente o crear uno nuevo.</p>
+    <div id="completed-jobs-table" class="management-table-wrap"></div>
+  </div>
   <div class="management-grid">
     <form class="management-card" id="product-form"><h3 id="product-form-title">Catálogo de productos</h3>
       <input type="hidden" name="id">
@@ -135,6 +140,60 @@ function renderSellableProductsTable(root) {
   ).join('')}</tbody></table>`;
 }
 
+const PRODUCT_TYPES = [
+  ['DEC','Decoración'],['FUN','Funcional y utilitario'],['REP','Repuestos y reparaciones'],
+  ['PER','Personalizados'],['MIN','Miniaturas y figuras'],['ACC','Accesorios'],
+  ['HOG','Hogar y organización'],['PRO','Prototipos'],
+];
+function nextProductCode(prefix) {
+  const pattern = new RegExp('^AM3D-' + prefix + '-(\\d+)$','i');
+  const max = appState.products.reduce((highest, product) => {
+    const match = String(product.codigo || '').match(pattern);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return 'AM3D-' + prefix + '-' + String(max + 1).padStart(4,'0');
+}
+function renderCompletedJobs(root) {
+  const completed = appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado')
+    .sort((a,b) => Number(b.createdAt || b.updatedAt || b.data?.fecha || 0) - Number(a.createdAt || a.updatedAt || a.data?.fecha || 0));
+  if (!completed.length) {
+    root.innerHTML = '<p class="management-empty">Todavía no hay trabajos realizados. Cuando marques un trabajo como realizado aparecerá aquí automáticamente.</p>';
+    return;
+  }
+  root.innerHTML = `<table class="management-table production-jobs-table"><thead><tr>
+    <th>Trabajo realizado</th><th>Producción</th><th>Vendidas</th><th>Disponibles</th><th>Estado</th><th>Producto / código</th><th>Acciones</th>
+  </tr></thead><tbody>${completed.map(job => {
+    const quantity = pieces(job);
+    const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
+    const available = Math.max(0,quantity-sold);
+    const product = getProduct(job.data.productoId);
+    const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
+    const selectedCategory = product?.tipo || 'ACC';
+    const prefix = PRODUCT_TYPES.some(([code])=>code===selectedCategory) ? selectedCategory : 'ACC';
+    return `<tr>
+      <td><b>${esc(job.data.nombre)}</b><small>${esc(job.data.cliente || 'Sin cliente')} · ${dateText(job.data.fecha)}</small></td>
+      <td><b>${quantity}</b> piezas</td><td>${sold}</td><td><b>${available}</b></td>
+      <td><span class="production-status production-status-${status[0]}">${status[1]}</span></td>
+      <td>${product ? `<b>${esc(product.codigo)}</b><small>${esc(product.nombre)}</small>` : '<span class="production-status production-status-unassigned">Sin clasificar</span>'}</td>
+      <td><div class="production-assignment">
+        <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
+          <option value="">Asignar producto existente</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
+        </select>
+        <button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
+        <details class="production-new-product">
+          <summary>Crear código nuevo</summary>
+          <div class="production-new-fields">
+            <input data-new-name="${esc(job.id)}" value="${esc(job.data.nombre)}" aria-label="Nombre del producto" placeholder="Nombre del producto">
+            <select data-new-type="${esc(job.id)}" aria-label="Tipo de producto">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}" ${prefix===code?'selected':''}>${label}</option>`).join('')}</select>
+            <input data-new-code="${esc(job.id)}" value="${nextProductCode(prefix)}" aria-label="Código del producto">
+            <button type="button" class="management-button" data-create-assign="${esc(job.id)}">Crear y asignar</button>
+          </div>
+        </details>
+      </div></td>
+      <td></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
   root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
@@ -197,6 +256,35 @@ function attachProducts(root) {
       if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;
       appState.jobs.forEach(j=>{if(j.data.productoId===id)j.data.productoId=null;});
       appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
+  });
+  root.querySelector('#completed-jobs-table').addEventListener('change',e=>{
+    const type=e.target.closest('[data-new-type]');
+    if(type){
+      const codeField=root.querySelector('[data-new-code="'+type.dataset.newType+'"]');
+      if(codeField)codeField.value=nextProductCode(type.value);
+    }
+  });
+  root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+    const assign=e.target.closest('[data-assign-existing]');
+    const create=e.target.closest('[data-create-assign]');
+    if(assign){
+      const job=getJob(assign.dataset.assignExisting);
+      const select=root.querySelector('[data-existing-product="'+assign.dataset.assignExisting+'"]');
+      if(!job||!select?.value){alert('Selecciona un producto existente.');return;}
+      job.data.productoId=select.value;
+      saveAppState();renderManagementView(root,'products');notify('Trabajo asignado al producto.');
+    }
+    if(create){
+      const job=getJob(create.dataset.createAssign);
+      const name=root.querySelector('[data-new-name="'+create.dataset.createAssign+'"]')?.value.trim();
+      const type=root.querySelector('[data-new-type="'+create.dataset.createAssign+'"]')?.value;
+      const code=root.querySelector('[data-new-code="'+create.dataset.createAssign+'"]')?.value.trim();
+      if(!job||!name||!code||!PRODUCT_TYPES.some(([prefix])=>prefix===type)){alert('Completa el nombre, tipo y código del producto.');return;}
+      if(appState.products.some(p=>String(p.codigo).toLowerCase()===code.toLowerCase())){alert('Ese código ya existe. Usa otro código.');return;}
+      const product={id:makeId('prod'),codigo:code,nombre:name,notas:'Creado desde trabajo realizado: '+job.data.nombre,tipo:type,createdAt:Date.now()};
+      appState.products.push(product);job.data.productoId=product.id;
+      saveAppState();renderManagementView(root,'products');notify('Producto creado y trabajo asignado.');
+    }
   });
   root.querySelector('#product-assignments').addEventListener('change',e=>{
     const sel=e.target.closest('[data-job-product]');if(!sel)return;
@@ -347,7 +435,7 @@ function attachFinance(root) {
 export function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
-  if(section==='products'){renderSellableProductsTable(container.querySelector('#sellable-products-table'));renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
+  if(section==='products'){renderSellableProductsTable(container.querySelector('#sellable-products-table'));renderCompletedJobs(container.querySelector('#completed-jobs-table'));renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
   if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
