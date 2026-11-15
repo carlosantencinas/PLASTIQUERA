@@ -65,7 +65,11 @@ function dashboard() {
     <div class="dashboard-section-heading"><div><p class="eyebrow">MATERIALES</p><h3>Filamento restante por color</h3></div><span>${filamentRows.length} materiales</span></div>
     ${filamentRows.length?`<div class="dashboard-filament-list">${filamentRows.map(item=>`
       <div class="dashboard-filament-row">
-        <div class="dashboard-filament-meta"><span class="dashboard-filament-name">${esc(item.name)}</span><strong>${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})} g</strong></div>
+        <div class="dashboard-filament-main">
+          <span class="dashboard-filament-swatch" style="--filament-color:${item.color}" aria-label="Color del filamento"></span>
+          <div class="dashboard-filament-details"><span class="dashboard-filament-name">${esc(item.name)}</span><small>FILAMENTO</small></div>
+          <strong class="dashboard-filament-quantity">${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})}<small>g</small></strong>
+        </div>
         <div class="dashboard-filament-track"><i style="width:${Math.max(2,item.stock/maxFilamentStock*100)}%;background:${item.color}"></i></div>
       </div>`).join('')}</div>`:'<p class="management-empty">No hay filamentos registrados en inventario. Registra compras de filamento para visualizar existencias por color.</p>'}
   </div>
