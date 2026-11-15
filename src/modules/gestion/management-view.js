@@ -14,6 +14,7 @@ const getJob = id => appState.jobs.find(j => j.id === id);
 const notify = message => { const node=document.querySelector('#management-message'); if(node){node.textContent=message;node.hidden=false;setTimeout(()=>node.hidden=true,2600);} };
 
 let active = 'dashboard';
+let pendingSaleProductId = null;
 
 function shell(section) {
   const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas'};
@@ -89,14 +90,14 @@ function sales() {
   return `<div class="management-grid">
     <form class="management-card" id="sale-form"><h3>Registrar venta</h3>
       <label class="management-field">Trabajo asociado<select name="jobId" id="sale-job"><option value="">Venta independiente / sin trabajo</option>${appState.jobs.map(j=>`<option value="${esc(j.id)}">${esc(j.data.nombre)} — ${money(j.calc?.precioUnitario || j.calc?.precioVenta)}</option>`).join('')}</select></label>
-      <label class="management-field">Producto (opcional)<select name="productoId" id="sale-product"><option value="">Sin producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
+      <label class="management-field">Producto (opcional)<select name="productoId" id="sale-product"><option value="">Sin producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${pendingSaleProductId===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
       <label class="management-field">Cliente<input name="cliente" list="management-clients" placeholder="Nombre del cliente"><datalist id="management-clients">${appState.clients.map(c=>`<option value="${esc(c.nombre)}"></option>`).join('')}</datalist></label>
       <div class="management-form-row"><label class="management-field">Cantidad<input name="cantidad" type="number" min="1" step="1" value="1" required></label><label class="management-field">Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required></label></div>
       <div class="management-form-row"><label class="management-field">Fecha<input name="fecha" type="date" value="${dateValue()}"></label><label class="management-field">Método de pago<select name="metodoPago"><option>Efectivo</option><option>QR</option><option>Transferencia</option><option>Tarjeta</option><option>Otro</option></select></label></div>
       <label class="management-field">Vendido por<input name="vendidoPor"></label><label class="management-field">Notas<textarea name="notas" rows="2"></textarea></label>
       <button class="management-button" type="submit">Guardar venta</button><p class="management-help" id="sale-stock-help">Al asociar un trabajo se validan las piezas restantes y se descuenta la cantidad vendida del stock disponible.</p>
     </form>
-    <div class="management-card"><h3>Historial de ventas</h3><div class="management-table-wrap" id="sales-table"></div><div class="management-actions"><button class="management-button secondary" id="sales-print">Imprimir reporte</button><button class="management-button secondary" id="sales-csv">Exportar CSV</button></div></div>
+    <div class="management-card sales-history-card"><h3>Historial de ventas</h3><div id="sales-summary" class="sales-summary"></div><div class="management-table-wrap" id="sales-table"></div><div class="management-actions"><button class="management-button secondary" id="sales-print">Imprimir reporte</button><button class="management-button secondary" id="sales-csv">Exportar CSV</button></div></div>
   </div>`;
 }
 
@@ -136,8 +137,8 @@ function renderSellableProductsTable(root) {
     root.innerHTML = '<p class="management-empty">No hay productos terminados disponibles para vender. Registra trabajos y asígnalos a un producto para calcular sus existencias.</p>';
     return;
   }
-  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto terminado</th><th>Unidades disponibles</th><th>Precio referencial</th></tr></thead><tbody>${availableProducts.map(({product,stock,price}) =>
-    `<tr><td>${esc(product.codigo)}</td><td><b>${esc(product.nombre)}</b><small>${esc(product.notas || '')}</small></td><td><b>${stock.available}</b></td><td>${price > 0 ? money(price) : 'Sin precio calculado'}</td></tr>`
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto terminado</th><th>Unidades disponibles</th><th>Precio referencial</th><th>Acción</th></tr></thead><tbody>${availableProducts.map(({product,stock,price}) =>
+    `<tr><td>${esc(product.codigo)}</td><td><b>${esc(product.nombre)}</b><small>${esc(product.notas || '')}</small></td><td><b>${stock.available}</b></td><td>${price > 0 ? money(price) : 'Sin precio calculado'}</td><td><button type="button" class="management-button product-quick-sale" data-sell-product="${esc(product.id)}">Vender</button></td></tr>`
   ).join('')}</tbody></table>`;
 }
 
@@ -168,13 +169,15 @@ function renderCompletedJobs(root) {
     const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
     const available = Math.max(0,quantity-sold);
     const product = getProduct(job.data.productoId);
+    const soldItems = appState.sales.filter(sale => sale.jobId === job.id);
+    const soldDetail = soldItems.length ? soldItems.map(sale => dateText(sale.fecha)+' · '+(sale.cliente||'Sin cliente')+' · '+(sale.cantidad||1)+' pza · '+money(sale.monto)).join(' | ') : 'Sin ventas registradas';
     const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
     const selectedCategory = product?.tipo || 'ACC';
     const prefix = PRODUCT_TYPES.some(([code])=>code===selectedCategory) ? selectedCategory : 'ACC';
     return `<tr>
       <td><b>${esc(job.data.nombre)}</b><small>${esc(job.data.cliente || 'Sin cliente')} · ${dateText(job.data.fecha)}</small></td>
       <td><b>${quantity}</b> piezas</td><td>${sold}</td><td><b>${available}</b></td>
-      <td><span class="production-status production-status-${status[0]}">${status[1]}</span><div class="production-stock-bar" title="Vendidas: ${sold} · Disponibles: ${available}"><i style="width:${quantity ? sold/quantity*100 : 0}%"></i></div></td>
+      <td><span class="production-status production-status-${status[0]}" title="${esc('Ventas: '+soldDetail+' · Vendidas: '+sold+' · Disponibles: '+available)}">${status[1]} ⓘ</span><div class="production-stock-bar" title="Vendidas: ${sold} · Disponibles: ${available}"><i style="width:${quantity ? sold/quantity*100 : 0}%"></i></div></td>
       <td>${product ? `<b>${esc(product.codigo)}</b><small>${esc(product.nombre)}</small>` : '<span class="production-status production-status-unassigned">Sin clasificar</span>'}</td>
       <td><div class="production-assignment">
         <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
@@ -215,8 +218,17 @@ function renderClientsTable(root, query='') {
   root.innerHTML=`<table class="management-table"><thead><tr><th>Tipo</th><th>Nombre</th><th>Teléfono</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.tipo)}</td><td><b>${esc(c.nombre)}</b><small>${esc(c.notas)}</small></td><td>${esc(c.telefono)}</td><td>${esc(c.contacto)}</td><td>${esc(c.direccion)}</td><td><button class="management-link" data-client-edit="${esc(c.id)}">Editar</button> <button class="management-link danger" data-client-delete="${esc(c.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
 }
 function renderSalesTable(root) {
-  if(!appState.sales.length){root.innerHTML='<p class="management-empty">Todavía no hay ventas registradas.</p>';return;}
-  root.innerHTML=`<table class="management-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Trabajo</th><th>Cantidad</th><th>Método</th><th>Monto</th><th></th></tr></thead><tbody>${[...appState.sales].sort((a,b)=>b.fecha-a.fecha).map(s=>`<tr><td>${dateText(s.fecha)}</td><td>${esc(s.cliente||'Sin cliente')}</td><td>${esc(s.jobNombre||'Independiente')}</td><td>${s.cantidad||1}</td><td>${esc(s.metodoPago)}</td><td><b>${money(s.monto)}</b></td><td><button class="management-link danger" data-sale-delete="${esc(s.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
+  const sales=[...appState.sales].sort((a,b)=>Number(b.fecha||b.createdAt||0)-Number(a.fecha||a.createdAt||0));
+  const total=sales.reduce((sum,sale)=>sum+Number(sale.monto||0),0);
+  const units=sales.reduce((sum,sale)=>sum+Number(sale.cantidad||1),0);
+  const average=sales.length?total/sales.length:0;
+  const summary=root.parentElement.querySelector('#sales-summary');
+  if(summary)summary.innerHTML=`<div><span>OPERACIONES</span><b>${sales.length}</b></div><div><span>UNIDADES VENDIDAS</span><b>${units}</b></div><div><span>INGRESOS REGISTRADOS</span><b>${money(total)}</b></div><div><span>VENTA PROMEDIO</span><b>${money(average)}</b></div>`;
+  if(!sales.length){root.innerHTML='<p class="management-empty">Todavía no hay ventas registradas.</p>';return;}
+  root.innerHTML=`<table class="management-table sales-detail-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Trabajo</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th>Pago</th><th>Vendido por</th><th>Notas</th><th></th></tr></thead><tbody>${sales.map(s=>{
+    const qty=Number(s.cantidad||1), unit=qty?Number(s.monto||0)/qty:0;
+    return `<tr><td>${dateText(s.fecha)}</td><td><b>${esc(s.cliente||'Sin cliente')}</b></td><td>${esc(s.productoNombre||'Sin producto asociado')}</td><td>${esc(s.jobNombre||'Venta independiente')}</td><td><b>${qty}</b></td><td>${money(unit)}</td><td class="sales-total">${money(s.monto)}</td><td><span class="sales-payment">${esc(s.metodoPago||'No especificado')}</span></td><td>${esc(s.vendidoPor||'—')}</td><td class="sales-notes" title="${esc(s.notas||'Sin notas')}">${esc(s.notas||'—')}</td><td><button class="management-link danger" data-sale-delete="${esc(s.id)}">Eliminar</button></td></tr>`;
+  }).join('')}</tbody></table>`;
 }
 function renderConsignments(root) {
   if(!appState.consignments.length){root.innerHTML='<p class="management-empty">Todavía no hay entregas registradas.</p>';return;}
@@ -241,6 +253,15 @@ function attachBackup(root) {
 }
 function attachProducts(root) {
   const form=root.querySelector('#product-form');
+  root.querySelector('#sellable-products-table').addEventListener('click',e=>{
+    const button=e.target.closest('[data-sell-product]');
+    if(!button)return;
+    pendingSaleProductId=button.dataset.sellProduct;
+    location.hash='#ventas';
+    renderManagementView(document.querySelector('#management-root'),'sales');
+    const saleForm=document.querySelector('#management-root #sale-form');
+    if(saleForm){saleForm.elements.productoId.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);document.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles.';saleForm.elements.cantidad.focus();}
+  });
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=d.codigo.trim();
     if(appState.products.some(p=>p.codigo.toLowerCase()===code.toLowerCase()&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
@@ -327,15 +348,16 @@ function attachSales(root) {
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const sale={id:makeId('venta'),jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
-    appState.sales.push(sale);saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
+    appState.sales.push(sale);pendingSaleProductId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
+  if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles.';}
   root.querySelector('#sales-table').addEventListener('click',e=>{
     const del=e.target.closest('[data-sale-delete]');if(!del)return;
     if(!confirm('¿Eliminar esta venta? Las piezas volverán a estar disponibles.'))return;
     appState.sales=appState.sales.filter(s=>s.id!==del.dataset.saleDelete);saveAppState();renderManagementView(root,'sales');notify('Venta eliminada.');
   });
   root.querySelector('#sales-print').addEventListener('click',()=>window.print());
-  root.querySelector('#sales-csv').addEventListener('click',()=>downloadCsv('ventas.csv',['Fecha','Cliente','Trabajo','Cantidad','Método','Monto'],appState.sales.map(s=>[dateText(s.fecha),s.cliente,s.jobNombre,s.cantidad,s.metodoPago,s.monto])));
+  root.querySelector('#sales-csv').addEventListener('click',()=>downloadCsv('ventas.csv',['Fecha','Cliente','Producto','Trabajo','Cantidad','Precio unitario','Monto','Método de pago','Vendido por','Notas'],appState.sales.map(s=>[dateText(s.fecha),s.cliente,s.productoNombre,s.jobNombre,s.cantidad,Number(s.monto||0)/Number(s.cantidad||1),s.monto,s.metodoPago,s.vendidoPor,s.notas])));
 }
 function attachConsignments(root) {
   const form=root.querySelector('#consignment-form'), productSel=form.elements.productoId;
