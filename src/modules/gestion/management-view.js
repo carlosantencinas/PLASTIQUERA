@@ -45,19 +45,15 @@ function dashboard() {
     const mins=totalMinutes%60;
     return [days?days+' d':'',h? h+' h':'',mins?mins+' min':''].filter(Boolean).join(' ')||'0 min';
   };
-  const colorMap={rojo:'#e30613',red:'#e30613',amarillo:'#ffed00',yellow:'#ffed00',negro:'#1d1d1b',black:'#1d1d1b',blanco:'#ffffff',white:'#ffffff',azul:'#2878d0',blue:'#2878d0',verde:'#269b62',green:'#269b62',naranja:'#f28c28',orange:'#f28c28',morado:'#8e55b8',purple:'#8e55b8',rosa:'#e879a8',pink:'#e879a8',gris:'#9298a1',gray:'#9298a1',grey:'#9298a1',marron:'#8b5a2b',brown:'#8b5a2b',cafe:'#8b5a2b',café:'#8b5a2b',cyan:'#00a6b2',turquesa:'#00a6b2',turquoise:'#00a6b2',dorado:'#c49a22',gold:'#c49a22',plateado:'#aeb4bc',silver:'#aeb4bc',natural:'#d8c8a5',transparente:'#d8d8d8',transparent:'#d8d8d8'};
   const filamentRows=inventoryState.materials
-    .filter(item=>item.categoria==='Filamento'||String(item.unidad).toLowerCase()==='g')
+    .filter(item=>item.categoria==='Filamento'&&String(item.unidad).toLowerCase()==='g')
     .sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre),'es'))
-    .map(item=>{
-      const label=String(item.color||item.nombre||'');
-      const named=label.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').match(/rojo|red|amarillo|yellow|negro|black|blanco|white|azul|blue|verde|green|naranja|orange|morado|purple|rosa|pink|gris|gray|grey|marron|brown|cafe|cyan|turquesa|turquoise|dorado|gold|plateado|silver|natural|transparente|transparent/)?.[0];
-      const rawHex=String(item.colorHex||item.hex||item.color||'').trim();
-      const hex=/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(rawHex)?rawHex:null;
-      const color=colorMap[named]||hex||'#c5c9d1';
-      const pct=Math.max(0,Math.min(100,Number(item.stock||0)/1000*100));
-      return {name:item.nombre,color,stock:Math.max(0,Number(item.stock||0)),pct};
-    });
+    .map(item=>({
+      name:item.nombre,
+      color:/^#[0-9a-f]{6}$/i.test(String(item.colorHex||''))?item.colorHex:'#c5c9d1',
+      stock:Math.max(0,Number(item.stock||0)),
+    }));
+  const maxFilamentStock=Math.max(1,...filamentRows.map(item=>item.stock));
   return `<div class="management-stats dashboard-production-stats">
     <article><span>TRABAJOS TOTALES</span><strong>${totalJobs}</strong><small>${completedJobs.length} realizados</small></article>
     <article><span>TIEMPO DE IMPRESIÓN</span><strong>${formatDuration(printerHours)}</strong><small>Acumulado de trabajos realizados</small></article>
@@ -67,15 +63,11 @@ function dashboard() {
   </div>
   <div class="management-card dashboard-filament-card">
     <div class="dashboard-section-heading"><div><p class="eyebrow">MATERIALES</p><h3>Filamento restante por color</h3></div><span>${filamentRows.length} materiales</span></div>
-    ${filamentRows.length?`<div class="dashboard-filament-grid">${filamentRows.map(item=>{
-      const colorKey=String(item.color).toLowerCase();
-      const swatch=colorMap[colorKey]||'#c5c9d1';
-      return `<article class="dashboard-filament-item">
-        <span class="dashboard-filament-swatch" style="--swatch:${swatch}"></span>
-        <div class="dashboard-filament-info"><b>${esc(item.name)}</b><strong>${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})} g</strong>
-        <div class="dashboard-filament-track"><i style="width:${item.pct}%;background:${item.color}"></i></div><small>${item.stock<200?'Stock bajo':item.stock<500?'Reponer pronto':'En stock'}</small></div>
-      </article>`;
-    }).join('')}</div>`:'<p class="management-empty">No hay filamentos registrados en inventario. Registra compras de filamento para visualizar existencias por color.</p>'}
+    ${filamentRows.length?`<div class="dashboard-filament-list">${filamentRows.map(item=>`
+      <div class="dashboard-filament-row">
+        <div class="dashboard-filament-meta"><span class="dashboard-filament-name">${esc(item.name)}</span><strong>${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})} g</strong></div>
+        <div class="dashboard-filament-track"><i style="width:${Math.max(2,item.stock/maxFilamentStock*100)}%;background:${item.color}"></i></div>
+      </div>`).join('')}</div>`:'<p class="management-empty">No hay filamentos registrados en inventario. Registra compras de filamento para visualizar existencias por color.</p>'}
   </div>
   <div class="management-card"><h3>Resumen de operación</h3><div class="management-summary-grid">
     <div><span>Piezas vendibles registradas</span><b>${sellable}</b></div>
