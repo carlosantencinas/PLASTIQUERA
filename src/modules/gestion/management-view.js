@@ -174,7 +174,7 @@ function renderCompletedJobs(root) {
     return `<tr>
       <td><b>${esc(job.data.nombre)}</b><small>${esc(job.data.cliente || 'Sin cliente')} · ${dateText(job.data.fecha)}</small></td>
       <td><b>${quantity}</b> piezas</td><td>${sold}</td><td><b>${available}</b></td>
-      <td><span class="production-status production-status-${status[0]}">${status[1]}</span></td>
+      <td><span class="production-status production-status-${status[0]}">${status[1]}</span><div class="production-stock-bar" title="Vendidas: ${sold} · Disponibles: ${available}"><i style="width:${quantity ? sold/quantity*100 : 0}%"></i></div></td>
       <td>${product ? `<b>${esc(product.codigo)}</b><small>${esc(product.nombre)}</small>` : '<span class="production-status production-status-unassigned">Sin clasificar</span>'}</td>
       <td><div class="production-assignment">
         <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
