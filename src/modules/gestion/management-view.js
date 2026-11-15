@@ -58,7 +58,8 @@ function products() {
   <div class="management-grid">
     <form class="management-card" id="product-form"><h3 id="product-form-title">Catálogo de productos</h3>
       <input type="hidden" name="id">
-      <label class="management-field">Código único<input name="codigo" required placeholder="P-001"></label>
+      <label class="management-field">Tipo de producto<select name="tipo">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label} (${code})</option>`).join('')}</select></label>
+      <label class="management-field">Código único<input name="codigo" required placeholder="AM3D-ACC-0001"></label>
       <label class="management-field">Nombre<input name="nombre" required placeholder="Nombre del producto"></label>
       <label class="management-field">Notas<textarea name="notas" rows="3" placeholder="Variantes, color, tamaño…"></textarea></label>
       <div class="management-actions"><button class="management-button" type="submit">Guardar producto</button><button class="management-button secondary" type="reset" id="product-reset">Limpiar</button></div>
@@ -196,9 +197,9 @@ function renderCompletedJobs(root) {
 }
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
-  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
     const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
-    return `<tr><td>${esc(p.codigo)}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
+    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 function renderAssignments(root) {
@@ -244,13 +245,13 @@ function attachProducts(root) {
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=d.codigo.trim();
     if(appState.products.some(p=>p.codigo.toLowerCase()===code.toLowerCase()&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
-    if(d.id){Object.assign(getProduct(d.id),{codigo:code,nombre:d.nombre.trim(),notas:d.notas.trim()});}
-    else appState.products.push({id:makeId('prod'),codigo:code,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
+    if(d.id){Object.assign(getProduct(d.id),{codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim()});}
+    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]');
-    if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
+    if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
       if(appState.sales.some(s=>s.productoId===id)||appState.consignments.some(c=>c.productoId===id)){alert('No se puede eliminar un producto con ventas o consignaciones asociadas. Conserva el historial comercial.');return;}
       if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;
