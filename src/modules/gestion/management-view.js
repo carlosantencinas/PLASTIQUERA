@@ -52,7 +52,7 @@ function products() {
   </div>
   <div class="management-card production-control-card">
     <h3>Trabajos realizados · control de disponibilidad</h3>
-    <p class="management-help">Todos los trabajos realizados aparecen aquí, incluso si todavía no tienen producto o código asignado. Puedes vincularlos a un producto existente o crear uno nuevo.</p>
+    <p class="management-help">Todos los trabajos realizados aparecen aquí, incluso si todavía no tienen producto o código asignado. Puedes vincularlos a un producto existente o crear uno nuevo. Las piezas no vendidas se calculan por trabajo; el stock en tienda se descuenta en el resumen del producto.</p>
     <div id="completed-jobs-table" class="management-table-wrap"></div>
   </div>
   <div class="management-grid">
@@ -162,7 +162,7 @@ function renderCompletedJobs(root) {
     return;
   }
   root.innerHTML = `<table class="management-table production-jobs-table"><thead><tr>
-    <th>Trabajo realizado</th><th>Producción</th><th>Vendidas</th><th>Disponibles</th><th>Estado</th><th>Producto / código</th><th>Acciones</th>
+    <th>Trabajo realizado</th><th>Producción</th><th>Vendidas</th><th>No vendidas</th><th>Estado</th><th>Producto / código</th><th>Acciones</th>
   </tr></thead><tbody>${completed.map(job => {
     const quantity = pieces(job);
     const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
@@ -191,7 +191,6 @@ function renderCompletedJobs(root) {
           </div>
         </details>
       </div></td>
-      <td></td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
