@@ -836,3 +836,28 @@ body { background: #f5f5f2; }
   .sidebar .nav-link { color: #f2f2ed; background: #292925; border-color: #44443e; }
   .sidebar .nav-link.active { color: #1D1D1B; background: #ffed00; border-color: #ffed00; }
 }
+
+/* AM3D · filtros del historial de trabajos */
+.job-history-filter-row th { padding: 7px 5px 10px; background: #fffdf5; vertical-align: top; }
+.job-history-filter {
+  display: block;
+  width: 100%;
+  min-width: 82px;
+  height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #d9dee8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1D1D1B;
+  font: inherit;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+.job-history-filter:focus { outline: 2px solid rgba(227,6,19,.18); border-color: #E30613; }
+.job-history-filter-row .job-action { min-height: 32px; padding: 6px 9px; white-space: nowrap; }
+.job-history-empty { padding: 22px; text-align: center; color: #777; }
+.job-table thead tr.job-history-filter-row th { position: sticky; top: 34px; z-index: 2; }
+@media (max-width: 900px) {
+  .job-history-filter { min-width: 100px; }
+  .job-history-filter-row th { padding-left: 4px; padding-right: 4px; }
+}
