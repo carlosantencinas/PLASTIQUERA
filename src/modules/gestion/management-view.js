@@ -48,12 +48,20 @@ function dashboard() {
   const filamentRows=inventoryState.materials
     .filter(item=>item.categoria==='Filamento'&&String(item.unidad).toLowerCase()==='g')
     .sort((a,b)=>String(a.nombre).localeCompare(String(b.nombre),'es'))
-    .map(item=>({
-      name:item.nombre,
-      color:/^#[0-9a-f]{6}$/i.test(String(item.colorHex||''))?item.colorHex:'#c5c9d1',
-      stock:Math.max(0,Number(item.stock||0)),
-    }));
-  const maxFilamentStock=Math.max(1,...filamentRows.map(item=>item.stock));
+    .map(item=>{
+      const color=/^#[0-9a-f]{6}$/i.test(String(item.colorHex||''))?item.colorHex:'#c5c9d1';
+      const hex=color.slice(1);
+      const channels=[0,2,4].map(index=>parseInt(hex.slice(index,index+2),16)/255).map(value=>value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4);
+      const luminance=0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2];
+      const textColor=luminance>0.42?'#171717':'#ffffff';
+      const typeMatch=String(item.nombre).toUpperCase().match(/\\b(PETG|PLA|TPU|ABS|ASA|PVA|HIPS|PC|NYLON|PA|PET|PLA\\+|PETG\\+)\\b/);
+      return {
+        name:item.nombre,
+        type:typeMatch?.[0]||String(item.nombre).trim().toUpperCase(),
+        color,textColor,
+        stock:Math.max(0,Number(item.stock||0)),
+      };
+    });
   return `<div class="management-stats dashboard-production-stats">
     <article><span>TRABAJOS TOTALES</span><strong>${totalJobs}</strong><small>${completedJobs.length} realizados</small></article>
     <article><span>TIEMPO DE IMPRESIÓN</span><strong>${formatDuration(printerHours)}</strong><small>Acumulado de trabajos realizados</small></article>
@@ -64,13 +72,10 @@ function dashboard() {
   <div class="management-card dashboard-filament-card">
     <div class="dashboard-section-heading"><div><p class="eyebrow">MATERIALES</p><h3>Filamento restante por color</h3></div><span>${filamentRows.length} materiales</span></div>
     ${filamentRows.length?`<div class="dashboard-filament-list">${filamentRows.map(item=>`
-      <div class="dashboard-filament-row">
-        <div class="dashboard-filament-main">
-          <span class="dashboard-filament-swatch" style="--filament-color:${item.color}" aria-label="Color del filamento"></span>
-          <div class="dashboard-filament-details"><span class="dashboard-filament-name">${esc(item.name)}</span><small>FILAMENTO</small></div>
-          <strong class="dashboard-filament-quantity">${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})}<small>g</small></strong>
-        </div>
-        <div class="dashboard-filament-track"><i style="width:${Math.max(2,item.stock/maxFilamentStock*100)}%;background:${item.color}"></i></div>
+      <div class="dashboard-filament-tile" style="--tile-color:${item.color};--tile-text:${item.textColor}">
+        <span class="dashboard-filament-type">${esc(item.type)}</span>
+        <strong class="dashboard-filament-stock">${item.stock.toLocaleString('es-BO',{maximumFractionDigits:1})}<small>g</small></strong>
+        <span class="dashboard-filament-material-name">${esc(item.name)}</span>
       </div>`).join('')}</div>`:'<p class="management-empty">No hay filamentos registrados en inventario. Registra compras de filamento para visualizar existencias por color.</p>'}
   </div>
   <div class="management-card"><h3>Resumen de operación</h3><div class="management-summary-grid">
