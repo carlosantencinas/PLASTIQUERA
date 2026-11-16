@@ -258,10 +258,12 @@ function renderHistory(filters = {}) {
         const totalGrams = Number(job.data.gramos) || materials.reduce((sum,item) => sum + Number(item.gramos || 0),0);
         const uniqueColors = [];
         materials.forEach(item => {
-          const label = String(item.color || getMaterialById(item.materialId)?.nombre || '').trim();
-          const key = label.toLowerCase();
+          const linkedMaterial = getMaterialById(item.materialId);
+          const label = String(linkedMaterial?.nombre || item.color || '').trim();
+          const key = String(item.materialId || label).toLowerCase();
           if (label && !uniqueColors.some(color => color.key === key)) {
-            const hex = label.match(/#[0-9a-f]{3,8}\\b/i)?.[0];
+            const inventoryHex = /^#[0-9a-f]{6}$/i.test(String(linkedMaterial?.colorHex || '')) ? linkedMaterial.colorHex : '';
+            const hex = inventoryHex || label.match(/#[0-9a-f]{3,8}\\b/i)?.[0];
             const namedColor = colorNames[label.toLowerCase()];
             uniqueColors.push({key,label,swatch:hex || namedColor || '#d5dbe5'});
           }
@@ -438,15 +440,29 @@ export function renderJobsView(container) {
 
   function filamentRowMarkup(row = {}) {
     const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
-      .filter(item => item.unidad === 'g')
+      .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
       .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+    const material = inventoryState.materials.find(item => item.id === row.materialId);
+    const color = /^#[0-9a-f]{6}$/i.test(String(material?.colorHex || '')) ? material.colorHex : '';
     return `<div class="filament-row" data-filament-row data-extruder="${escapeText(row.extruder || '')}" data-source="${escapeText(row.source || 'manual')}">
       <label class="job-field"><span>Material / bobina</span><select data-filament-material>${options.join('')}</select></label>
-      <label class="job-field"><span>Color</span><input data-filament-color type="text" value="${escapeText(row.color || '')}" placeholder="Negro, rojo…"></label>
+      <div class="job-field filament-color-display"><span>Color del inventario</span><div class="filament-color-value"><i data-filament-swatch style="--filament-color:${color || '#d5dbe5'}"></i><b data-filament-color-label>${escapeText(material?.nombre ? (color || 'Color no definido') : (row.color || 'Selecciona una bobina'))}</b></div><input data-filament-color type="hidden" value="${escapeText(row.color || '')}"></div>
       <label class="job-field"><span>Consumo (g)</span><input data-filament-grams type="number" min="0" step="0.01" value="${Number(row.gramos || 0) || ''}" placeholder="35"></label>
       <button type="button" class="job-action danger" data-remove-filament title="Quitar filamento">Quitar</button>
       <small>${row.extruder ? `Extrusor ${escapeText(row.extruder)} · Importado del slicer` : 'Consumo previsto / confirmado'}</small>
     </div>`;
+  }
+
+  function syncFilamentColor(row) {
+    const materialId = row.querySelector('[data-filament-material]')?.value || 'manual';
+    const material = materialId !== 'manual' ? getMaterialById(materialId) : null;
+    const hex = /^#[0-9a-f]{6}$/i.test(String(material?.colorHex || '')) ? material.colorHex : '';
+    const swatch = row.querySelector('[data-filament-swatch]');
+    const label = row.querySelector('[data-filament-color-label]');
+    const storedColor = row.querySelector('[data-filament-color]');
+    if (swatch) swatch.style.setProperty('--filament-color', hex || '#d5dbe5');
+    if (label) label.textContent = material ? (hex || 'Color no definido') : (storedColor?.value || 'Sin color asignado');
+    if (storedColor && material) storedColor.value = hex || material.nombre;
   }
 
   function setFilamentRows(rows = [{}]) {
@@ -463,10 +479,11 @@ export function renderJobsView(container) {
       const select = row.querySelector('[data-filament-material]');
       const selected = select.value || 'manual';
       const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
-        .filter(item => item.unidad === 'g')
+        .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
         .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
       select.innerHTML = options.join('');
-      select.value = inventoryState.materials.some(item => item.id === selected && item.unidad === 'g') ? selected : 'manual';
+      select.value = inventoryState.materials.some(item => item.id === selected && item.categoria === 'Filamento' && item.unidad === 'g') ? selected : 'manual';
+      syncFilamentColor(row);
     });
     const linked = rows.filter(row => row.querySelector('[data-filament-material]').value !== 'manual').length;
     materialPrice.readOnly = linked > 0 && linked === rows.length;
@@ -517,7 +534,10 @@ export function renderJobsView(container) {
   }
 
   form.addEventListener('input', refresh);
-  filamentRoot.addEventListener('change', refresh);
+  filamentRoot.addEventListener('change', event => {
+    if (event.target.matches('[data-filament-material]')) syncFilamentColor(event.target.closest('[data-filament-row]'));
+    refresh();
+  });
   filamentRoot.addEventListener('click', event => {
     if (event.target.closest('[data-remove-filament]')) { event.target.closest('[data-filament-row]')?.remove(); refresh(); }
   });
