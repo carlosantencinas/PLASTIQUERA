@@ -12,6 +12,7 @@ const stockFor = productId => getProductStock(productId, appState.jobs, appState
 const availableFor = productId => stockFor(productId).available;
 const getProduct = id => appState.products.find(p => p.id === id);
 const getJob = id => appState.jobs.find(j => j.id === id);
+const findClientByName = (name, type) => { const key=String(name||'').trim().toLocaleLowerCase('es'); const matches=appState.clients.filter(client=>String(client.nombre||'').trim().toLocaleLowerCase('es')===key&&(!type||client.tipo===type)); return matches.length===1?matches[0]:null; };
 const notify = message => { const node=document.querySelector('#management-message'); if(node){node.textContent=message;node.hidden=false;setTimeout(()=>node.hidden=true,2600);} };
 
 let active = 'dashboard';
@@ -174,7 +175,7 @@ function clients() {
       <label class="management-field">Notas<textarea name="notas" rows="3"></textarea></label>
       <div class="management-actions"><button class="management-button" type="submit">Guardar</button><button class="management-button secondary" type="reset">Limpiar</button></div>
     </form>
-    <div class="management-card"><h3>Directorio</h3><input class="management-search" id="client-search" placeholder="Buscar por nombre, teléfono o notas"><div id="clients-table" class="management-table-wrap"></div></div>
+    <div class="management-card"><h3>Directorio</h3><input class="management-search" id="client-search" placeholder="Buscar por nombre, teléfono o notas"><div id="clients-table" class="management-table-wrap"></div><div id="client-history" class="client-history" hidden></div></div>
   </div>`;
 }
 
@@ -307,7 +308,7 @@ function renderClientsTable(root, query='') {
   const q=query.toLowerCase();
   const rows=appState.clients.filter(c=>[c.nombre,c.telefono,c.notas,c.tipo].join(' ').toLowerCase().includes(q));
   if(!rows.length){root.innerHTML='<p class="management-empty">No hay clientes o tiendas que coincidan.</p>';return;}
-  root.innerHTML=`<table class="management-table"><thead><tr><th>Tipo</th><th>Nombre</th><th>Teléfono</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.tipo)}</td><td><b>${esc(c.nombre)}</b><small>${esc(c.notas)}</small></td><td>${esc(c.telefono)}</td><td>${esc(c.contacto)}</td><td>${esc(c.direccion)}</td><td><button class="management-link" data-client-edit="${esc(c.id)}">Editar</button> <button class="management-link danger" data-client-delete="${esc(c.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
+  root.innerHTML=`<table class="management-table"><thead><tr><th>Tipo</th><th>Nombre</th><th>Teléfono</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.tipo)}</td><td><b>${esc(c.nombre)}</b><small>${esc(c.notas)}</small></td><td>${esc(c.telefono)}</td><td>${esc(c.contacto)}</td><td>${esc(c.direccion)}</td><td><button class="management-link" data-client-history="${esc(c.id)}">Historial</button> <button class="management-link" data-client-edit="${esc(c.id)}">Editar</button> <button class="management-link danger" data-client-delete="${esc(c.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
 }
 function renderSalesTable(root) {
   const sales=[...appState.sales].sort((a,b)=>Number(b.fecha||b.createdAt||0)-Number(a.fecha||a.createdAt||0));
@@ -426,7 +427,8 @@ function attachClients(root) {
   });
   root.querySelector('#client-search').addEventListener('input',e=>renderClientsTable(root.querySelector('#clients-table'),e.target.value));
   root.querySelector('#clients-table').addEventListener('click',e=>{
-    const edit=e.target.closest('[data-client-edit]'),del=e.target.closest('[data-client-delete]');
+    const history=e.target.closest('[data-client-history]'),edit=e.target.closest('[data-client-edit]'),del=e.target.closest('[data-client-delete]');
+    if(history){const client=appState.clients.find(x=>x.id===history.dataset.clientHistory);if(!client)return;const jobs=appState.jobs.filter(x=>x.data?.clientId===client.id);const sales=appState.sales.filter(x=>x.clientId===client.id);const consignments=appState.consignments.filter(x=>x.clientId===client.id);const total=sales.reduce((n,x)=>n+Number(x.monto||0),0);const panel=root.querySelector('#client-history');panel.hidden=false;panel.innerHTML=`<h3>Historial de ${esc(client.nombre)}</h3><div class="client-history-stats"><span>${jobs.length} trabajos</span><span>${sales.length} ventas · ${money(total)}</span><span>${consignments.length} consignaciones</span></div><ul>${jobs.map(x=>`<li>Trabajo: ${esc(x.data.nombre)} · ${dateText(x.data.fecha)}</li>`).concat(sales.map(x=>`<li>Venta: ${esc(x.productoNombre||x.jobNombre||'Venta')} · ${money(x.monto)} · ${dateText(x.fecha)}</li>`),consignments.map(x=>`<li>Consignación: ${esc(x.productoNombre)} · ${x.cantidad} unidades · ${dateText(x.fecha)}</li>`)).join('')||'<li>Sin movimientos vinculados.</li>'}</ul>`;return;}
     if(edit){const c=appState.clients.find(x=>x.id===edit.dataset.clientEdit);Object.entries(c).forEach(([k,v])=>{if(form.elements[k])form.elements[k].value=v??'';});root.querySelector('#client-form-title').textContent='Editar registro';}
     if(del){if(!confirm('¿Eliminar este registro? Las ventas y consignaciones existentes se conservan.'))return;appState.clients=appState.clients.filter(c=>c.id!==del.dataset.clientDelete);saveAppState();renderManagementView(root,'clients');notify('Registro eliminado.');}
   });
@@ -447,7 +449,7 @@ function attachSales(root) {
     const product=getProduct(d.productoId);
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    const sale={id:makeId('venta'),jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
+    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
     appState.sales.push(sale);pendingSaleProductId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
   if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);const latestJob=jobIdsFor(pendingSaleProductId).sort((a,b)=>Number(b.createdAt||b.data?.fecha||0)-Number(a.createdAt||a.data?.fecha||0))[0];const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles. Ajusta el monto según la cantidad y el precio acordado.';}
@@ -470,7 +472,7 @@ function attachConsignments(root) {
     if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const consignmentDate=d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now();
-    appState.consignments.push({id:makeId('consig'),tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
+    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
   });
   root.querySelector('#consignments-table').addEventListener('click',e=>{
