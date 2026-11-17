@@ -1,6 +1,7 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
 
-export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [] };
+export const DEFAULT_SETTINGS = Object.freeze({ precioKwh: 0.70, potenciaW: 1450, mantenimientoHora: 1.50, tarifaHora: 20, horasTrabajo: 0.5, fallas: 10, margen: 40, precioFilamentoKg: 95 });
+export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [], settings: { ...DEFAULT_SETTINGS } };
 
 function restoreLegacyJobMovements() {
   const known = new Set(inventoryState.jobMovements.map(item => item.jobId));
@@ -37,6 +38,7 @@ export function replaceAppStateFromCloud(data = {}) {
   appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
     appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+  appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
   loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
   // Los registros anteriores a los estados se consideran trabajos históricos ya realizados.
   for (const job of appState.jobs) {
@@ -59,6 +61,7 @@ export function loadAppState() {
   appState.sales = [];
   appState.consignments = [];
   appState.expenses = [];
+  appState.settings = { ...DEFAULT_SETTINGS };
   loadInventorySnapshot({ materials: [], purchases: [], jobMovements: [] });
   return false;
 }
@@ -85,6 +88,7 @@ export function exportBackup() {
     materials: inventoryState.materials,
     purchases: inventoryState.purchases,
     jobMovements: inventoryState.jobMovements,
+    settings: appState.settings,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -110,6 +114,7 @@ export function importBackup(file) {
         appState.sales = Array.isArray(data.sales) ? data.sales : [];
         appState.consignments = Array.isArray(data.consignments) ? data.consignments : (data.consignaciones || []);
         appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+        appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
         loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
         normalizeConsignments();
         restoreLegacyJobMovements();
