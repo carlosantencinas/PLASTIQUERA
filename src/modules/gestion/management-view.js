@@ -1,4 +1,4 @@
-import { appState, saveAppState, exportBackup, importBackup, makeId } from '../../services/app-store.js';
+import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
 import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
 
@@ -18,14 +18,64 @@ let active = 'dashboard';
 let pendingSaleProductId = null;
 
 function shell(section) {
-  const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas'};
+  const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas',settings:'Configuración'};
   return `
   <section class="management-module">
     <div class="management-heading"><div><p class="eyebrow">GESTIÓN COMERCIAL</p><h2>${titles[section]}</h2><p>${section==='products'?'Productos terminados, existencias listas para vender y asignación de trabajos.':section==='dashboard'?'Resumen de producción, ventas y operación del taller.':'Registros relacionados con la producción, los clientes y la venta de productos.'}</p></div><span class="local-data-tag">Datos guardados en Firebase</span></div>
     <div id="management-message" class="management-message" hidden role="status"></div>
-    ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():section==='finance'?finance():consignments()}
+    ${section==='dashboard'?dashboard():section==='products'?products():section==='clients'?clients():section==='sales'?sales():section==='finance'?finance():section==='settings'?settings():consignments()}
     <section class="backup-panel"><div><strong>Respaldo de datos</strong><p>Exporta periódicamente un archivo JSON. La importación reemplaza los datos actuales de Firebase.</p></div><div class="backup-actions"><button type="button" class="management-button secondary" id="backup-export">Exportar respaldo</button><label class="management-button secondary file-button">Importar respaldo<input type="file" id="backup-import" accept=".json,application/json" hidden></label></div></section>
   </section>`;
+}
+
+
+function settings() {
+  const s = { ...DEFAULT_SETTINGS, ...(appState.settings || {}) };
+  const field = (name, label, unit, help='') => `
+    <label class="management-field">${label} (${unit})
+      <input name="${name}" type="number" min="0" step="any" value="${esc(s[name])}" required>
+      ${help ? `<small class="settings-help">${help}</small>` : ''}
+    </label>`;
+  return `
+    <form class="management-card settings-form" id="settings-form">
+      <div class="settings-intro"><h3>Parámetros automáticos de costos</h3><p class="management-help">Se aplican como valores predeterminados al crear un trabajo nuevo. No alteran los costos ni los precios históricos ya guardados.</p></div>
+      <div class="management-grid settings-grid">
+        ${field('precioKwh','Costo de energía eléctrica','Bs/kWh','Tarifa usada para estimar el costo de impresión.')}
+        ${field('potenciaW','Potencia predeterminada de impresora','W','Potencia de referencia para el cálculo energético.')}
+        ${field('mantenimientoHora','Mantenimiento de impresora','Bs/hora')}
+        ${field('tarifaHora','Mano de obra','Bs/hora')}
+        ${field('horasTrabajo','Tiempo predeterminado de mano de obra','horas')}
+        ${field('fallas','Reserva por fallas','%')}
+        ${field('margen','Margen de ganancia','%')}
+        ${field('precioFilamentoKg','Costo manual de filamento','Bs/kg','Se usa cuando el trabajo no está vinculado a una bobina del inventario.')}
+      </div>
+      <div class="management-actions"><button class="management-button" type="submit">Guardar configuración</button><button class="management-button secondary" type="button" id="settings-reset">Restablecer valores iniciales</button></div>
+      <p class="management-help">Moneda: bolivianos (Bs). Los parámetros se guardan en Firestore y se comparten entre los dispositivos que acceden a esta cuenta de taller.</p>
+    </form>`;
+}
+function attachSettings(root) {
+  const form = root.querySelector('#settings-form');
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    const next = {};
+    for (const key of Object.keys(DEFAULT_SETTINGS)) {
+      const value = Number(data[key]);
+      if (!Number.isFinite(value) || value < 0) { alert('Revisa los parámetros: todos deben ser números iguales o mayores que cero.'); return; }
+      next[key] = value;
+    }
+    appState.settings = next;
+    saveAppState();
+    renderManagementView(root, 'settings');
+    notify('Configuración guardada.');
+  });
+  root.querySelector('#settings-reset').addEventListener('click', () => {
+    if (!confirm('¿Restablecer los parámetros iniciales?')) return;
+    appState.settings = { ...DEFAULT_SETTINGS };
+    saveAppState();
+    renderManagementView(root, 'settings');
+    notify('Parámetros iniciales restaurados.');
+  });
 }
 
 function dashboard() {
@@ -512,4 +562,5 @@ export function renderManagementView(container, section='dashboard') {
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
   if(section==='finance')attachFinance(container);
+  if(section==='settings')attachSettings(container);
 }
