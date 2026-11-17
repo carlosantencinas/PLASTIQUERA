@@ -4,7 +4,7 @@ import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
 
 const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
-const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements'];
+const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements','settings'];
 let initialReadCompleted = false;
 
 function normalized(data = {}) {
@@ -18,6 +18,7 @@ function normalized(data = {}) {
     consignaciones: Array.isArray(data.consignaciones) ? data.consignaciones : (Array.isArray(data.consignments) ? data.consignments : []),
     expenses: Array.isArray(data.expenses) ? data.expenses : [],
     jobMovements: Array.isArray(data.jobMovements) ? data.jobMovements : [],
+    settings: data.settings && typeof data.settings === 'object' ? data.settings : {},
   };
 }
 
@@ -34,7 +35,7 @@ export async function readSharedState() {
     data: {
       jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
       products: data.productos, clients: data.clientes, consignments: data.consignaciones, expenses: data.expenses,
-      jobMovements: data.jobMovements,
+      jobMovements: data.jobMovements, settings: data.settings,
     },
   };
 }
@@ -52,7 +53,7 @@ export function subscribeSharedState(onChange, onError = () => {}) {
       data: {
         jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
         products: data.productos, clients: data.clientes, consignments: data.consignaciones,
-        expenses: data.expenses, jobMovements: data.jobMovements,
+        expenses: data.expenses, jobMovements: data.jobMovements, settings: data.settings,
       },
     });
   }, onError);
@@ -65,6 +66,7 @@ export async function writeSharedState() {
     jobs: appState.jobs, materials: inventoryState.materials, purchases: inventoryState.purchases,
     sales: appState.sales, productos: appState.products, clientes: appState.clients,
     consignaciones: appState.consignments, expenses: appState.expenses, jobMovements: inventoryState.jobMovements,
+    settings: appState.settings,
   };
   await runTransaction(db, async transaction => {
     await transaction.get(sharedRef);
