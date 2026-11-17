@@ -72,6 +72,7 @@ function readForm(form) {
   return {
     nombre: String(fd.get('nombre') || '').trim(),
     cliente: String(fd.get('cliente') || '').trim(),
+    clientId: (() => { const name = String(fd.get('cliente') || '').trim().toLocaleLowerCase('es'); const matches = appState.clients.filter(client => String(client.nombre || '').trim().toLocaleLowerCase('es') === name); return matches.length === 1 ? matches[0].id : null; })(),
     fecha,
     descripcion: String(fd.get('descripcion') || '').trim(),
     estadoTrabajo: String(fd.get('estadoTrabajo') || 'cotizacion'),
