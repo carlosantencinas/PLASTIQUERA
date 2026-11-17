@@ -36,6 +36,7 @@ app.innerHTML = `
         <a class="nav-link" href="#clientes"><span>♙</span> Clientes</a>
         <a class="nav-link" href="#consignaciones"><span>⇄</span> Consignaciones</a>
         <a class="nav-link" href="#finanzas"><span>▣</span> Finanzas</a>
+        <a class="nav-link" href="#configuracion"><span>⚙</span> Configuración</a>
       </nav>
       <div class="sidebar-footer"><span class="status-dot"></span><span id="save-status">Esperando conexión a Firebase</span></div>
     </aside>
@@ -81,6 +82,7 @@ function navigate(hash) {
     clientes:['management','clients','Clientes'],
     consignaciones:['management','consignments','Consignaciones'],
     finanzas:['management','finance','Finanzas'],
+    configuracion:['management','settings','Configuración'],
   };
   const route=routes[key]||routes.inicio;
   currentRoute=key;
