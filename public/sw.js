@@ -1,4 +1,4 @@
-const CACHE_NAME = 'am3d-shell-v3';
+const CACHE_NAME = 'am3d-shell-v4';
 const APP_ROOT = '/PLASTIQUERA/';
 
 self.addEventListener('install', event => {
