@@ -18,6 +18,16 @@ function restoreLegacyJobMovements() {
     });
   }
 }
+export function linkClientRecords() {
+  const norm = value => String(value || '').trim().toLocaleLowerCase('es');
+  const findClient = (name, type) => {
+    const matches = appState.clients.filter(client => norm(client.nombre) === norm(name) && (!type || client.tipo === type));
+    return matches.length === 1 ? matches[0].id : null;
+  };
+  appState.jobs.forEach(job => { if (job?.data && !job.data.clientId) job.data.clientId = findClient(job.data.cliente); });
+  appState.sales.forEach(sale => { if (!sale.clientId) sale.clientId = findClient(sale.cliente); });
+  appState.consignments.forEach(item => { if (!item.clientId) item.clientId = findClient(item.tienda, 'Tienda'); });
+}
 function normalizeConsignments() {
   appState.consignments.forEach(item => {
     if (!Array.isArray(item.pagos)) item.pagos = Number(item.montoPagado || 0) > 0 ? [{ monto: Number(item.montoPagado), fecha: item.fecha || Date.now(), metodoPago: 'Histórico' }] : [];
@@ -46,6 +56,7 @@ export function replaceAppStateFromCloud(data = {}) {
     if (!job.data.estadoTrabajo) job.data.estadoTrabajo = 'realizado';
   }
   normalizeConsignments();
+  linkClientRecords();
   restoreLegacyJobMovements();
   saveAppState({ dispatch: false });
   window.dispatchEvent(new Event('appstate:loaded'));
@@ -117,6 +128,7 @@ export function importBackup(file) {
         appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
         loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
         normalizeConsignments();
+        linkClientRecords();
         restoreLegacyJobMovements();
         if (!saveAppState()) throw new Error('No se pudo guardar el respaldo importado en este navegador.');
         resolve(true);
