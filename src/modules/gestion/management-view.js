@@ -17,6 +17,7 @@ const notify = message => { const node=document.querySelector('#management-messa
 
 let active = 'dashboard';
 let pendingSaleProductId = null;
+let pendingSaleJobId = null;
 
 function shell(section) {
   const titles = {dashboard:'Panel principal',products:'Productos',clients:'Clientes',sales:'Ventas',consignments:'Consignaciones',finance:'Finanzas',settings:'Configuración'};
@@ -286,6 +287,7 @@ function renderCompletedJobs(root) {
             <button type="button" class="management-button" data-create-assign="${esc(job.id)}">Crear y asignar</button>
           </div>
         </details>
+        ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -379,8 +381,27 @@ function attachProducts(root) {
     }
   });
   root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+    const sellJob=e.target.closest('[data-sell-job]');
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
+    if(sellJob){
+      const job=getJob(sellJob.dataset.sellJob);
+      if(!job)return;
+      pendingSaleJobId=job.id;
+      pendingSaleProductId=job.data?.productoId||null;
+      location.hash='#ventas';
+      renderManagementView(document.querySelector('#management-root'),'sales');
+      const saleForm=document.querySelector('#management-root #sale-form');
+      if(saleForm){
+        saleForm.elements.jobId.value=job.id;
+        if(pendingSaleProductId)saleForm.elements.productoId.value=pendingSaleProductId;
+        const unit=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
+        if(unit>0)saleForm.elements.monto.value=unit.toFixed(2);
+        root.querySelector('#sale-stock-help').textContent=`Venta de ${job.data.nombre} · ${pieces(job)} piezas vendibles antes de descontar ventas registradas.`;
+        saleForm.elements.cantidad.focus();
+      }
+      return;
+    }
     if(assign){
       const job=getJob(assign.dataset.assignExisting);
       const select=root.querySelector('[data-existing-product="'+assign.dataset.assignExisting+'"]');
@@ -450,9 +471,18 @@ function attachSales(root) {
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
     if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
-    appState.sales.push(sale);pendingSaleProductId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
+    appState.sales.push(sale);pendingSaleProductId=null;pendingSaleJobId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
-  if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);const latestJob=jobIdsFor(pendingSaleProductId).sort((a,b)=>Number(b.createdAt||b.data?.fecha||0)-Number(a.createdAt||a.data?.fecha||0))[0];const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles. Ajusta el monto según la cantidad y el precio acordado.';}
+  if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
+    const job=getJob(pendingSaleJobId);
+    jobSel.value=pendingSaleJobId;
+    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]'))prodSel.value=job.data.productoId;
+    const unit=Number(job?.calc?.precioUnitario||job?.calc?.precioVenta||0);
+    if(unit>0)form.elements.monto.value=unit.toFixed(2);
+    updatePrice();
+    root.querySelector('#sale-stock-help').textContent=`Venta de ${job?.data?.nombre||'trabajo'} · ${pieces(job)} piezas vendibles.`;
+    pendingSaleJobId=null;
+  } else if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);const latestJob=jobIdsFor(pendingSaleProductId).sort((a,b)=>Number(b.createdAt||b.data?.fecha||0)-Number(a.createdAt||a.data?.fecha||0))[0];const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles. Ajusta el monto según la cantidad y el precio acordado.';}
   root.querySelector('#sales-table').addEventListener('click',e=>{
     const del=e.target.closest('[data-sale-delete]');if(!del)return;
     if(!confirm('¿Eliminar esta venta? Las piezas volverán a estar disponibles.'))return;
