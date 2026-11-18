@@ -1,12 +1,12 @@
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
-import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const dateText = value => value ? new Date(value).toLocaleDateString('es-BO') : '—';
 const dateValue = value => { const d = value ? new Date(value) : new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-const pieces = job => Math.max(0, Number(job?.data?.piezasVendibles ?? 1));
+const pieces = job => getJobSellableQuantity(job);
 const jobIdsFor = productId => appState.jobs.filter(j => j.data?.productoId === productId);
 const stockFor = productId => getProductStock(productId, appState.jobs, appState.sales, appState.consignments);
 const availableFor = productId => stockFor(productId).available;
