@@ -397,7 +397,6 @@ function attachProducts(root) {
         if(pendingSaleProductId)saleForm.elements.productoId.value=pendingSaleProductId;
         const unit=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
         if(unit>0)saleForm.elements.monto.value=unit.toFixed(2);
-        root.querySelector('#sale-stock-help').textContent=`Venta de ${job.data.nombre} · ${pieces(job)} piezas vendibles antes de descontar ventas registradas.`;
         saleForm.elements.cantidad.focus();
       }
       return;
