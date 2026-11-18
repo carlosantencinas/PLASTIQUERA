@@ -4,13 +4,23 @@ export function positiveInteger(value, label = 'La cantidad') {
   return number;
 }
 
+export function getJobSellableQuantity(job) {
+  const data = job?.data || {};
+  const explicit = data.piezasVendibles;
+  const quantity = explicit !== undefined && explicit !== null
+    ? Number(explicit)
+    : Number(data.piezas ?? 1) - Number(data.piezasFallidas ?? 0);
+  return Number.isFinite(quantity) ? Math.max(0, quantity) : 0;
+}
+
 export function getJobSoldQuantity(jobId, sales) {
   return sales.filter(sale => sale.jobId === jobId).reduce((sum, sale) => sum + Number(sale.cantidad || 1), 0);
 }
 
 export function getProductStock(productId, jobs, sales, consignments) {
+  // Un producto puede agrupar varios trabajos, incluso si cada uno corresponde a otro color.
   const productJobs = jobs.filter(job => job.data?.productoId === productId);
-  const produced = productJobs.reduce((sum, job) => sum + Math.max(0, Number(job.data?.piezasVendibles ?? 1)), 0);
+  const produced = productJobs.reduce((sum, job) => sum + getJobSellableQuantity(job), 0);
   const jobById = new Map(jobs.map(job => [job.id, job]));
   const sold = sales.filter(sale => {
     if (sale.productoId) return sale.productoId === productId;
@@ -24,7 +34,7 @@ export function getProductStock(productId, jobs, sales, consignments) {
 export function assertJobCanSell(job, quantity, sales) {
   const qty = positiveInteger(quantity);
   const sold = getJobSoldQuantity(job.id, sales);
-  const available = Math.max(0, Number(job.data?.piezasVendibles ?? 1) - sold);
+  const available = Math.max(0, getJobSellableQuantity(job) - sold);
   if (qty > available) throw new Error('No hay suficientes piezas del trabajo. Disponibles: ' + available + '.');
   return available;
 }
