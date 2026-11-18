@@ -282,7 +282,7 @@ function renderHistory(filters = {}) {
           <td>${money(job.calc.ganancia)}</td>
           <td><div class="job-actions">
             <button type="button" data-quote="${job.id}" class="job-action">Ver cotización</button>
-            ${job.data.estadoTrabajo !== 'realizado' ? `<button type="button" data-mark-realized="${job.id}" class="job-action">Marcar realizado</button>` : ''}
+            ${job.data.estadoTrabajo !== 'realizado' ? `<button type="button" data-mark-realized="${job.id}" class="job-action">Marcar realizado</button>` : `<button type="button" data-duplicate="${job.id}" class="job-action">Copiar a nueva cotización</button>`}
             <button type="button" data-edit="${job.id}" class="job-action">Editar</button>
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
@@ -641,6 +641,7 @@ export function renderJobsView(container) {
     const productionLabel = event.target.closest('[data-production-label]');
     const printAllLabels = event.target.closest('[data-print-production-all]');
     const editButton = event.target.closest('[data-edit]');
+    const duplicateButton = event.target.closest('[data-duplicate]');
     const markRealized = event.target.closest('[data-mark-realized]');
     const deleteButton = event.target.closest('[data-delete]');
     if (productionLabel) {
@@ -664,6 +665,29 @@ export function renderJobsView(container) {
         window.dispatchEvent(new Event('inventory:updated'));
         refresh();
       } catch (error) { window.alert(error.message); }
+    }
+    if (duplicateButton) {
+      const source = jobs.find(item => item.id === duplicateButton.dataset.duplicate);
+      if (!source || (source.data.estadoTrabajo || 'realizado') !== 'realizado') return;
+      // La copia es una cotización independiente: nunca reutiliza el ID ni modifica el trabajo original.
+      editingId = null;
+      form.reset();
+      Object.entries(source.data || {}).forEach(([key, value]) => {
+        if (key === 'materiales' || key === 'clientId' || !form.elements[key]) return;
+        form.elements[key].value = key === 'fecha' ? dateInput(Date.now()) : value ?? '';
+      });
+      form.elements.nombre.value = String(source.data.nombre || '') + ' (copia)';
+      form.elements.estadoTrabajo.value = 'cotizacion';
+      const sourceMaterials = Array.isArray(source.data.materiales) && source.data.materiales.length
+        ? source.data.materiales.map(item => ({ ...item }))
+        : [{ materialId: source.data.materialId || 'manual', gramos: source.data.gramos || 0, color: source.data.materialNombre || '' }];
+      setFilamentRows(sourceMaterials);
+      container.querySelector('#jobFormTitle').textContent = 'Nueva cotización basada en trabajo realizado';
+      container.querySelector('#jobSaveButton').textContent = 'Guardar nueva cotización';
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      form.elements.nombre.focus();
+      refresh();
+      return;
     }
     if (editButton) {
       const job = jobs.find(item => item.id === editButton.dataset.edit);
