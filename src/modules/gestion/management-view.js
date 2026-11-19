@@ -371,10 +371,12 @@ function attachProducts(root) {
     if(saleForm){saleForm.elements.productoId.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);document.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles.';saleForm.elements.cantidad.focus();}
   });
   form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=d.codigo.trim();
-    if(appState.products.some(p=>p.codigo.toLowerCase()===code.toLowerCase()&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
-    if(d.id){Object.assign(getProduct(d.id),{codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim()});}
-    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
+    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
+    if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
+    const normalizedCode=code.toLocaleUpperCase('es');
+    if(appState.products.some(p=>String(p.codigo||'').trim().toLocaleUpperCase('es')===normalizedCode&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
+    if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
+    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
@@ -382,9 +384,11 @@ function attachProducts(root) {
     if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
     if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
-      if(appState.sales.some(s=>s.productoId===id)||appState.consignments.some(c=>c.productoId===id)){alert('No se puede eliminar un producto con ventas o consignaciones asociadas. Conserva el historial comercial.');return;}
-      if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;
-      appState.jobs.forEach(j=>{if(j.data.productoId===id)j.data.productoId=null;});
+      const hasSales=appState.sales.some(s=>s.productoId===id);
+      const hasConsignments=appState.consignments.some(c=>c.productoId===id);
+      const hasJobs=appState.jobs.some(j=>j.data?.productoId===id);
+      if(hasSales||hasConsignments||hasJobs){alert('No se puede eliminar este producto porque tiene historial comercial o trabajos vinculados. Para conservar la trazabilidad, mantenlo en el catálogo; más adelante se podrá marcar como inactivo.');return;}
+      if(!confirm('¿Eliminar este producto sin movimientos ni trabajos asociados?'))return;
       appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
   });
   root.querySelector('#completed-jobs-table').addEventListener('change',e=>{
