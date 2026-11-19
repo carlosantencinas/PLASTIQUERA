@@ -6,6 +6,9 @@ import { inventoryState } from './inventory-store.js';
 const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
 const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements','settings'];
 let initialReadCompleted = false;
+let baseRevision = 0;
+let localDirty = false;
+let writeInProgress = false;
 
 function normalized(data = {}) {
   return {
@@ -22,57 +25,80 @@ function normalized(data = {}) {
   };
 }
 
+function publicData(data) {
+  const value = normalized(data);
+  return {
+    jobs: value.jobs, materials: value.materials, purchases: value.purchases,
+    sales: value.sales, products: value.productos, clients: value.clientes,
+    consignments: value.consignaciones, expenses: value.expenses,
+    jobMovements: value.jobMovements, settings: value.settings,
+  };
+}
+
 export async function readSharedState() {
   if (!sharedRef) throw new Error('Firebase no está configurado.');
   const snapshot = await getDoc(sharedRef);
   const raw = snapshot.exists() ? snapshot.data() : {};
+  baseRevision = Number.isInteger(raw._revision) ? raw._revision : 0;
   initialReadCompleted = true;
   const data = normalized(raw);
   return {
     exists: snapshot.exists(),
     hasRecords: watchedFields.some(field => Array.isArray(raw[field]) && raw[field].length > 0) ||
       Boolean(raw.products?.length || raw.clients?.length || raw.consignments?.length),
-    data: {
-      jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
-      products: data.productos, clients: data.clientes, consignments: data.consignaciones, expenses: data.expenses,
-      jobMovements: data.jobMovements, settings: data.settings,
-    },
+    data: publicData(data),
   };
 }
 
-export function subscribeSharedState(onChange, onError = () => {}) {
+export function markSharedStateDirty() {
+  localDirty = true;
+}
+
+export function subscribeSharedState(onChange, onError = () => {}, onConflict = () => {}) {
   if (!sharedRef) throw new Error('Firebase no está configurado.');
   return onSnapshot(sharedRef, { includeMetadataChanges: true }, snapshot => {
-    // Ignorar escrituras locales pendientes. La confirmación del servidor llegará
-    // como un cambio de metadatos y permitirá aplicar el estado definitivo.
     if (snapshot.metadata.hasPendingWrites) return;
     const raw = snapshot.exists() ? snapshot.data() : {};
-    const data = normalized(raw);
-    onChange({
-      exists: snapshot.exists(),
-      data: {
-        jobs: data.jobs, materials: data.materials, purchases: data.purchases, sales: data.sales,
-        products: data.productos, clients: data.clientes, consignments: data.consignaciones,
-        expenses: data.expenses, jobMovements: data.jobMovements, settings: data.settings,
-      },
-    });
+    const revision = Number.isInteger(raw._revision) ? raw._revision : 0;
+    if (revision === baseRevision) return;
+    if (localDirty || writeInProgress) {
+      onConflict({ expectedRevision: baseRevision, remoteRevision: revision });
+      return;
+    }
+    baseRevision = revision;
+    onChange({ exists: snapshot.exists(), data: publicData(raw), revision });
   }, onError);
 }
 
 export async function writeSharedState() {
   if (!sharedRef) throw new Error('Firebase no está configurado.');
   if (!initialReadCompleted) throw new Error('Primero debes leer el documento compartido de Firebase.');
+  const expectedRevision = baseRevision;
   const payload = {
     jobs: appState.jobs, materials: inventoryState.materials, purchases: inventoryState.purchases,
     sales: appState.sales, productos: appState.products, clientes: appState.clients,
     consignaciones: appState.consignments, expenses: appState.expenses, jobMovements: inventoryState.jobMovements,
     settings: appState.settings,
   };
-  await runTransaction(db, async transaction => {
-    await transaction.get(sharedRef);
-    // Se elimina la comparación con una copia antigua que generaba falsos conflictos.
-    // La última sesión que guarde prevalece si hay ediciones simultáneas.
-    transaction.set(sharedRef, payload, { merge: true });
-  });
-  return true;
+  writeInProgress = true;
+  try {
+    const nextRevision = await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(sharedRef);
+      const raw = snapshot.exists() ? snapshot.data() : {};
+      const actualRevision = Number.isInteger(raw._revision) ? raw._revision : 0;
+      if (actualRevision !== expectedRevision) {
+        const error = new Error('CONFLICTO_NUBE: otro administrador modificó los datos. Se bloqueó el guardado para evitar sobrescribir sus cambios. Recarga los datos antes de continuar.');
+        error.code = 'app/cloud-conflict';
+        throw error;
+      }
+      const revision = actualRevision + 1;
+      transaction.set(sharedRef, { ...payload, _revision: revision }, { merge: true });
+      return revision;
+    });
+    baseRevision = nextRevision;
+    localDirty = false;
+    return true;
+  } finally {
+    writeInProgress = false;
+  }
 }
