@@ -53,3 +53,41 @@ export function consignmentBalance(item) {
   const paid = Math.max(0, Number(item.montoPagado || 0));
   return { due, paid, pending: Math.max(0, due - paid), credit: Math.max(0, paid - due) };
 }
+
+/**
+ * Stock de una variante. Los movimientos antiguos sin variantId se excluyen
+ * deliberadamente: quedan como stock histórico sin clasificar y no se asignan
+ * automáticamente a un color/talla.
+ */
+export function getProductVariantStock(productId, variantId, jobs, sales, consignments) {
+  if (!productId || !variantId) throw new Error('Selecciona un producto y una variante válidos.');
+  const variantJobs = jobs.filter(job =>
+    job.data?.productoId === productId && job.data?.variantId === variantId
+  );
+  const produced = variantJobs.reduce((sum, job) => sum + getJobSellableQuantity(job), 0);
+  const jobById = new Map(jobs.map(job => [job.id, job]));
+  const saleBelongsToVariant = sale => {
+    if (sale.productoId && sale.productoId !== productId) return false;
+    const linkedJob = sale.jobId ? jobById.get(sale.jobId) : null;
+    const saleVariantId = sale.variantId || linkedJob?.data?.variantId || null;
+    const saleProductId = sale.productoId || linkedJob?.data?.productoId;
+    return saleProductId === productId && saleVariantId === variantId;
+  };
+  const sold = sales.filter(saleBelongsToVariant)
+    .reduce((sum, sale) => sum + Number(sale.cantidad || 1), 0);
+  const consigned = consignments.filter(item =>
+    item.productoId === productId && item.variantId === variantId
+  ).reduce((sum, item) =>
+    sum + Math.max(0, Number(item.cantidad || 0) - Number(item.cantidadDevuelta || 0)), 0);
+  return { produced, sold, consigned, available: Math.max(0, produced - sold - consigned) };
+}
+
+export function assertVariantCanMove(productId, variantId, quantity, jobs, sales, consignments) {
+  const qty = positiveInteger(quantity);
+  const stock = getProductVariantStock(productId, variantId, jobs, sales, consignments);
+  if (qty > stock.available) {
+    throw new Error('Stock insuficiente de la variante. Disponibles: ' + stock.available + '.');
+  }
+  return stock;
+}
+
