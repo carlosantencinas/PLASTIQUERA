@@ -1,3 +1,4 @@
+import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
 import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
@@ -292,11 +293,23 @@ function renderCompletedJobs(root) {
     </tr>`;
   }).join('')}</tbody></table>`;
 }
+function printProductBarcode(product) {
+  const code = String(product?.codigo || '').trim();
+  if (!code) { alert('Este producto no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
+  const popup = window.open('', '_blank', 'width=520,height=420');
+  if (!popup) { alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
+  popup.document.open();
+  popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiqueta ' + esc(code) + '</title><style>@page{size:70mm 40mm;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:5mm;text-align:center;color:#111}.name{font-weight:700;font-size:14px;margin-bottom:3mm}.code{font-size:11px;letter-spacing:.5px;margin-top:2mm}svg{max-width:100%;height:auto}.hint{font-size:9px;color:#555;margin-top:2mm}@media screen{body{max-width:70mm;margin:20px auto;border:1px solid #ddd}}</style></head><body><div class="name">' + esc(product.nombre) + '</div><svg id="product-barcode"></svg><div class="code">' + esc(code) + '</div><div class="hint">AM3D · Code 128</div></body></html>');
+  popup.document.close();
+  try { JsBarcode(popup.document.getElementById('product-barcode'), code, {format:'CODE128',displayValue:false,margin:2,height:48,width:1.7}); }
+  catch (error) { popup.close(); alert('No se pudo generar el código de barras: ' + error.message); return; }
+  popup.focus(); popup.setTimeout(() => popup.print(), 300);
+}
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
-  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th>Etiqueta</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
     const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
-    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
+    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-barcode="${esc(p.id)}">Código de barras</button></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 function renderAssignments(root) {
@@ -365,7 +378,8 @@ function attachProducts(root) {
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
-    const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]');
+    const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
+    if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
     if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
       if(appState.sales.some(s=>s.productoId===id)||appState.consignments.some(c=>c.productoId===id)){alert('No se puede eliminar un producto con ventas o consignaciones asociadas. Conserva el historial comercial.');return;}
