@@ -174,7 +174,7 @@ Revisión estática del código en `main` al iniciar la etapa 0:
 - Formato propuesto: **Code 128**, adecuado para códigos alfanuméricos. Se reutilizará la biblioteca `JsBarcode` ya presente en el proyecto, evitando depender de servicios externos.
 - Desde el catálogo se podrá visualizar el código de barras y generar/imprimir etiquetas con nombre, código legible y barras escaneables.
 - El código interno debe ser único y estable. Si cambia, se deberá actualizar la etiqueta; no se generarán códigos nuevos en cada impresión.
-- Cuando existan códigos/SKU independientes por variante, cada variante deberá poder identificarse sin confundir colores o presentaciones. No asignar automáticamente el mismo código a variantes distintas.
+- **Decisión confirmada por el usuario:** cada variante comercial tendrá su propio código/SKU único y su propio código de barras, además del código general del producto padre. El código de barras de la variante codificará exactamente su SKU; el del producto padre codificará exactamente el código general. No se reutilizará el código padre para etiquetar variantes ni se asignará el mismo SKU a variantes distintas.
 - La implementación debe probar lectura con un escáner que funcione como teclado y validar que el texto leído coincide exactamente con el código interno.
 
 ### Criterios de aceptación añadidos
