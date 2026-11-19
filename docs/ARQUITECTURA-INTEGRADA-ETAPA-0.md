@@ -157,3 +157,34 @@ Revisión estática del código en `main` al iniciar la etapa 0:
 - No activar aún asientos financieros automáticos ni reversión de compras.
 
 **Criterio de salida de etapa 0:** respaldo JSON y copia Firestore verificados, reglas reales revisadas, inventario de registros documentado, riesgos de concurrencia resueltos en entorno de prueba y pruebas de regresión aprobadas. Sólo entonces se autoriza diseñar y ejecutar la migración compatible de variantes.
+
+## 9. Requisitos funcionales añadidos antes de etapa 1
+
+### Reimpresiones en trabajos finalizados
+- Un trabajo en estado `realizado` podrá recibir nuevas tandas de producción mediante una acción explícita **Agregar nueva impresión**.
+- La reimpresión no crea otro trabajo ni modifica/reemplaza los datos históricos de la tanda anterior. Se conserva el ID del trabajo y se agrega un evento/tanda de producción independiente vinculada al trabajo.
+- Cada tanda registra como mínimo: ID propio, fecha, producto y variante (cuando aplique), cantidad fabricada, piezas fallidas, cantidad vendible, materiales/consumos asociados y usuario/fecha de registro.
+- Al confirmar una tanda, sólo las unidades vendibles de esa tanda incrementan el stock de la variante correspondiente. El movimiento debe ser idempotente para impedir que un doble clic o reintento duplique existencias.
+- Los materiales de la nueva tanda se descuentan por separado según su consumo real. No se vuelve a aplicar ni a descontar el consumo histórico de las tandas anteriores.
+- La vista del trabajo mostrará el acumulado producido y el historial de tandas, permitiendo distinguir producción original y reimpresiones.
+- Cualquier corrección o anulación de una tanda deberá generar una reversión trazable; no borrar movimientos históricos.
+
+### Código de barras de productos terminados
+- Cada producto tendrá un código de barras generado a partir de su código interno existente (por ejemplo, `AM3D-ACC-0001`); el contenido codificado será exactamente ese código, sin prefijos ni identificadores aleatorios añadidos.
+- Formato propuesto: **Code 128**, adecuado para códigos alfanuméricos. Se reutilizará la biblioteca `JsBarcode` ya presente en el proyecto, evitando depender de servicios externos.
+- Desde el catálogo se podrá visualizar el código de barras y generar/imprimir etiquetas con nombre, código legible y barras escaneables.
+- El código interno debe ser único y estable. Si cambia, se deberá actualizar la etiqueta; no se generarán códigos nuevos en cada impresión.
+- Cuando existan códigos/SKU independientes por variante, cada variante deberá poder identificarse sin confundir colores o presentaciones. No asignar automáticamente el mismo código a variantes distintas.
+- La implementación debe probar lectura con un escáner que funcione como teclado y validar que el texto leído coincide exactamente con el código interno.
+
+### Criterios de aceptación añadidos
+| Caso | Resultado requerido |
+|---|---|
+| Agregar una reimpresión a un trabajo realizado | Se conserva el trabajo y se agrega una tanda independiente |
+| Reimpresión de 5 unidades vendibles | El stock de la variante aumenta exactamente en 5 |
+| Reimpresión con piezas fallidas | Sólo se suma la cantidad vendible |
+| Reintentar el guardado de una tanda | No duplica stock ni consumos |
+| Dos reimpresiones del mismo trabajo en fechas distintas | Ambas quedan visibles en el historial y sus cantidades se acumulan |
+| Generar etiqueta de producto | Code 128 codifica exactamente el código interno |
+| Escanear etiqueta | El lector devuelve el código interno exacto |
+| Variantes con SKU distintos | Cada variante genera su propia etiqueta/código |
