@@ -2,6 +2,7 @@ import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
 import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
+import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -293,13 +294,14 @@ function renderCompletedJobs(root) {
     </tr>`;
   }).join('')}</tbody></table>`;
 }
-function printProductBarcode(product) {
-  const code = String(product?.codigo || '').trim();
-  if (!code) { alert('Este producto no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
+function printProductBarcode(product, variant = null) {
+  const code = String(variant?.codigo || product?.codigo || '').trim();
+  const labelName = variant ? product.nombre + ' · ' + variant.nombre : product?.nombre;
+  if (!code) { alert('Este registro no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
   const popup = window.open('', '_blank', 'width=520,height=420');
   if (!popup) { alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
   popup.document.open();
-  popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiqueta ' + esc(code) + '</title><style>@page{size:70mm 40mm;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:5mm;text-align:center;color:#111}.name{font-weight:700;font-size:14px;margin-bottom:3mm}.code{font-size:11px;letter-spacing:.5px;margin-top:2mm}svg{max-width:100%;height:auto}.hint{font-size:9px;color:#555;margin-top:2mm}@media screen{body{max-width:70mm;margin:20px auto;border:1px solid #ddd}}</style></head><body><div class="name">' + esc(product.nombre) + '</div><svg id="product-barcode"></svg><div class="code">' + esc(code) + '</div><div class="hint">AM3D · Code 128</div></body></html>');
+  popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiqueta ' + esc(code) + '</title><style>@page{size:70mm 40mm;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:5mm;text-align:center;color:#111}.name{font-weight:700;font-size:14px;margin-bottom:3mm}.code{font-size:11px;letter-spacing:.5px;margin-top:2mm}svg{max-width:100%;height:auto}.hint{font-size:9px;color:#555;margin-top:2mm}@media screen{body{max-width:70mm;margin:20px auto;border:1px solid #ddd}}</style></head><body><div class="name">' + esc(labelName) + '</div><svg id="product-barcode"></svg><div class="code">' + esc(code) + '</div><div class="hint">AM3D · Code 128 · ' + (variant ? 'Variante' : 'Producto') + '</div></body></html>');
   popup.document.close();
   try { JsBarcode(popup.document.getElementById('product-barcode'), code, {format:'CODE128',displayValue:false,margin:2,height:48,width:1.7}); }
   catch (error) { popup.close(); alert('No se pudo generar el código de barras: ' + error.message); return; }
@@ -307,9 +309,11 @@ function printProductBarcode(product) {
 }
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
-  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th>Etiqueta</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Variantes / etiquetas</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
     const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
-    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-barcode="${esc(p.id)}">Código de barras</button></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
+    const variants=getProductVariants(p);
+    const variantRows=variants.map(v=>`<div class="product-variant-row"><span><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code></span><button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`).join('');
+    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small><button type="button" class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta padre</button></td><td>${variantRows || '<small>Sin variantes</small>'}<button type="button" class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 function renderAssignments(root) {
@@ -374,14 +378,28 @@ function attachProducts(root) {
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
     if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
     const normalizedCode=code.toLocaleUpperCase('es');
-    if(appState.products.some(p=>String(p.codigo||'').trim().toLocaleUpperCase('es')===normalizedCode&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
+    if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
     if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
     else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
+    const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
     if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
+    if(variantBarcode){const product=getProduct(variantBarcode.dataset.variantBarcode);const variant=getProductVariants(product).find(item=>item.id===variantBarcode.dataset.variantId);if(product&&variant)printProductBarcode(product,variant);}
+    if(addVariant){
+      const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
+      const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
+      const code=prompt('Código/SKU único de esta variante (por ejemplo, '+product.codigo+'-NEG):');if(code===null)return;
+      try{
+        const values=validateVariantInput({code,name},appState.products);
+        if(!Array.isArray(product.variantes))product.variantes=[];
+        product.variantes.push({id:makeId('var'),...values,activo:true,createdAt:Date.now()});
+        saveAppState();renderManagementView(root,'products');notify('Variante guardada. Ya puedes imprimir su etiqueta individual.');
+      }catch(error){alert(error.message);}
+      return;
+    }
     if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
       const hasSales=appState.sales.some(s=>s.productoId===id);
