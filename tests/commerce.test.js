@@ -33,3 +33,36 @@ test('saldo de consignación identifica deuda y saldo a favor por devoluciones',
     due: 40, paid: 100, pending: 0, credit: 60,
   });
 });
+
+test('stock por variante separa colores y no clasifica movimientos históricos sin variante', async () => {
+  const { getProductVariantStock, assertVariantCanMove } = await import('../src/calculations/commerce.js');
+  const variantJobs = [
+    { id: 'black-1', data: { productoId: 'p1', variantId: 'negro', piezasVendibles: 8 } },
+    { id: 'yellow-1', data: { productoId: 'p1', variantId: 'amarillo', piezasVendibles: 5 } },
+    { id: 'legacy-1', data: { productoId: 'p1', piezasVendibles: 3 } },
+  ];
+  const sales = [
+    { id: 's-black', productoId: 'p1', variantId: 'negro', cantidad: 2 },
+    { id: 's-yellow-job', jobId: 'yellow-1', productoId: 'p1', cantidad: 1 },
+    { id: 's-legacy', productoId: 'p1', cantidad: 1 },
+  ];
+  const consignments = [
+    { productoId: 'p1', variantId: 'negro', cantidad: 2, cantidadDevuelta: 1 },
+    { productoId: 'p1', cantidad: 4, cantidadDevuelta: 0 },
+  ];
+  assert.deepEqual(getProductVariantStock('p1', 'negro', variantJobs, sales, consignments), {
+    produced: 8, sold: 2, consigned: 1, available: 5,
+  });
+  assert.deepEqual(getProductVariantStock('p1', 'amarillo', variantJobs, sales, consignments), {
+    produced: 5, sold: 1, consigned: 0, available: 4,
+  });
+  assert.equal(assertVariantCanMove('p1', 'negro', 5, variantJobs, sales, consignments).available, 5);
+  assert.throws(() => assertVariantCanMove('p1', 'negro', 6, variantJobs, sales, consignments), /Disponibles: 5/);
+});
+
+test('venta sin variante vinculada a trabajo usa la variante del trabajo', async () => {
+  const { getProductVariantStock } = await import('../src/calculations/commerce.js');
+  const variantJobs = [{ id: 'j-negro', data: { productoId: 'p1', variantId: 'negro', piezasVendibles: 6 } }];
+  const sales = [{ id: 's1', jobId: 'j-negro', cantidad: 2 }];
+  assert.equal(getProductVariantStock('p1', 'negro', variantJobs, sales, []).available, 4);
+});
