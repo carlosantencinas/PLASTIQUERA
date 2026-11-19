@@ -2,7 +2,7 @@ import './styles/main.css';
 import { getFirebaseStatus, isFirebaseConfigured, auth } from './services/firebase.js';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { replaceAppStateFromCloud } from './services/app-store.js';
-import { readSharedState, writeSharedState, subscribeSharedState } from './services/cloud-store.js';
+import { readSharedState, writeSharedState, subscribeSharedState, markSharedStateDirty } from './services/cloud-store.js';
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
@@ -147,6 +147,14 @@ async function initializeUserSession(user) {
       setStatus('No se reciben cambios en tiempo real. Los guardados se seguirán intentando.','Escucha desconectada',false);
       const el=document.querySelector('#save-status');
       if(el)el.textContent='Escucha en tiempo real desconectada';
+    }, conflict=>{
+      cloudSyncEnabled=false;
+      const message='CONFLICTO_NUBE: otro administrador modificó los datos. Se detuvieron los guardados para proteger la información. No recargues esta pestaña si tienes cambios pendientes; conserva esta sesión y coordina la recuperación antes de continuar.';
+      console.error(message, conflict);
+      setStatus('Conflicto de edición detectado. Guardado bloqueado para proteger los datos.','Conflicto',false);
+      const el=document.querySelector('#save-status');
+      if(el)el.textContent='Conflicto: cambios no guardados';
+      window.alert(message);
     });
     mountModules();
     appShell.hidden=false;
@@ -171,6 +179,7 @@ document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('clic
 window.addEventListener('popstate',()=>navigate(location.hash));
 window.addEventListener('hashchange',()=>navigate(location.hash));
 window.addEventListener('plastiqueria:saved',()=>{
+  markSharedStateDirty();
   const el=document.querySelector('#save-status');
   if(el)el.textContent='Guardando en Firebase…';
   if(cloudSyncEnabled)syncCloud();
