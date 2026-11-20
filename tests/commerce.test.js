@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance } from '../src/calculations/commerce.js';
+import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, assertProductionBatchCanReverse } from '../src/calculations/commerce.js';
 
 const jobs = [
   { id: 'j1', data: { productoId: 'p1', piezasVendibles: 10 } },
@@ -94,4 +94,37 @@ test('un lote rechaza cantidades inconsistentes y consumo de material inválido'
   const job = { id: 'job-1', data: { piezasVendibles: 2 } };
   assert.throws(() => createProductionBatch(job, { id: 'b1', producedQuantity: 3, failedQuantity: 4 }), /fallidas/);
   assert.throws(() => createProductionBatch(job, { id: 'b2', producedQuantity: 3, materialConsumptions: [{ materialId: 'pla', grams: 0 }] }), /gramos mayores/);
+});
+
+
+test('reversión de lote exige unidades libres del trabajo y del SKU', () => {
+  const job = { id: 'job-r', data: { productoId: 'p-r', variantId: 'black', piezasVendibles: 4,
+    productionBatches: [{ id: 'batch-r', jobId: 'job-r', sellableQuantity: 3, status: 'active' }] } };
+  const batch = job.data.productionBatches[0];
+  const jobs = [job, { id: 'job-other', data: { productoId: 'p-r', variantId: 'black', piezasVendibles: 5 } }];
+  assert.deepEqual(assertProductionBatchCanReverse(job, batch, jobs, [], []), {
+    quantity: 3, jobAvailable: 7, productAvailable: 12,
+  });
+  assert.throws(
+    () => assertProductionBatchCanReverse(job, batch, jobs, [{ jobId: 'job-r', cantidad: 2 }], []),
+    /trabajo no tiene suficientes/,
+  );
+  assert.throws(
+    () => assertProductionBatchCanReverse(job, batch, jobs, [], [
+      { productoId: 'p-r', variantId: 'black', cantidad: 10, cantidadDevuelta: 0 },
+    ]),
+    /unidades vendidas o consignadas/,
+  );
+  batch.status = 'reversed';
+  assert.throws(() => assertProductionBatchCanReverse(job, batch, jobs, [], []), /ya fue revertido/);
+});
+
+test('reversión de lote valida relación de trabajo y variante', () => {
+  const job = { id: 'job-a', data: { productoId: 'p-a', variantId: 'blue', piezasVendibles: 2 } };
+  const batch = { id: 'batch-a', jobId: 'job-otro', sellableQuantity: 1, status: 'active' };
+  assert.throws(() => assertProductionBatchCanReverse(job, batch, [job], [], []), /no corresponde/);
+  assert.throws(
+    () => assertProductionBatchCanReverse(job, { ...batch, jobId: job.id, sellableQuantity: 0 }, [job], [], []),
+    /cantidad vendible/,
+  );
 });
