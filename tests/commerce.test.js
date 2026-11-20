@@ -106,7 +106,7 @@ test('reversión de lote exige unidades libres del trabajo y del SKU', () => {
     quantity: 3, jobAvailable: 7, productAvailable: 12,
   });
   assert.throws(
-    () => assertProductionBatchCanReverse(job, batch, jobs, [{ jobId: 'job-r', cantidad: 2 }], []),
+    () => assertProductionBatchCanReverse(job, batch, jobs, [{ jobId: 'job-r', cantidad: 5 }], []),
     /trabajo no tiene suficientes/,
   );
   assert.throws(
