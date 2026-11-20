@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -280,7 +280,7 @@ function renderCompletedJobs(root) {
         <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
           <option value="">Asignar producto existente</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
         </select>
-        <button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
+        <select data-existing-variant="${esc(job.id)}" aria-label="Variante de ${esc(job.data.nombre)}"><option value="">Sin variante</option>${getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'" '+(job.data.variantId===v.id?'selected':'')+'>'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('')}</select><button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
         <details class="production-new-product">
           <summary>Crear código nuevo</summary>
           <div class="production-new-fields">
@@ -445,6 +445,10 @@ function attachProducts(root) {
       const product=appState.products.find(item=>item.id===productId);
       if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
       job.data.productoId=product.id;
+      const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');
+      const variantId=String(variantSelect?.value||'');
+      if(variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante no pertenece al producto seleccionado.');return;}
+      job.data.variantId=variantId||null;
       saveAppState();
       // Actualiza los dos listados desde el mismo estado en memoria inmediatamente.
       renderSellableProductsTable(root.querySelector('#sellable-products-table'));
