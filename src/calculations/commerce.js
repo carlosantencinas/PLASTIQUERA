@@ -139,3 +139,32 @@ export function assertVariantCanMove(productId, variantId, quantity, jobs, sales
   return stock;
 }
 
+
+/**
+ * Comprueba que un lote pueda anularse sin dejar ventas ni consignaciones
+ * sin respaldo. La comprobación global respeta el SKU/variante del trabajo.
+ */
+export function assertProductionBatchCanReverse(job, batch, jobs, sales, consignments) {
+  if (!job?.id || !batch?.id || batch.jobId !== job.id) {
+    throw new Error('El lote no corresponde al trabajo seleccionado.');
+  }
+  if (batch.status === 'reversed') throw new Error('El lote ya fue revertido.');
+  const quantity = Number(batch.sellableQuantity);
+  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+    throw new Error('La cantidad vendible del lote no es válida.');
+  }
+  const jobAvailable = Math.max(0, getJobSellableQuantity(job) - getJobSoldQuantity(job.id, sales));
+  if (quantity > jobAvailable) {
+    throw new Error('El trabajo no tiene suficientes unidades disponibles sin comprometer ventas. Disponibles: ' + jobAvailable + '.');
+  }
+  let productAvailable = null;
+  if (job.data?.productoId && job.data?.variantId) {
+    productAvailable = getProductVariantStock(job.data.productoId, job.data.variantId, jobs, sales, consignments).available;
+  } else if (job.data?.productoId) {
+    productAvailable = getProductStock(job.data.productoId, jobs, sales, consignments).available;
+  }
+  if (productAvailable !== null && quantity > productAvailable) {
+    throw new Error('El producto o variante tiene unidades vendidas o consignadas. Disponibles: ' + productAvailable + '.');
+  }
+  return { quantity, jobAvailable, productAvailable };
+}
