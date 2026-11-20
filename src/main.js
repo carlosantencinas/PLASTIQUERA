@@ -60,6 +60,7 @@ const managementRoot=document.querySelector('#management-root');
 const statusText=document.querySelector('#firebase-status');
 const statusBadge=document.querySelector('#firebase-indicator');
 let cloudSyncEnabled=false;
+let authGeneration=0;
 let unsubscribeCloud=null;
 let cloudQueue=Promise.resolve();
 let currentRoute='inicio';
@@ -102,9 +103,14 @@ function mountModules() {
   navigate(location.hash||'#inicio');
 }
 async function syncCloud() {
-  cloudQueue=cloudQueue.catch(()=>{}).then(()=>writeSharedState());
+  const generation=authGeneration;
+  cloudQueue=cloudQueue.catch(()=>{}).then(()=>{
+    if(!cloudSyncEnabled || generation!==authGeneration) return false;
+    return writeSharedState();
+  });
   try {
-    await cloudQueue;
+    const saved=await cloudQueue;
+    if(!saved) return false;
     const el=document.querySelector('#save-status');
     if(el)el.textContent='Guardado en Firebase';
     setStatus('Todos los cambios están guardados en Firestore.','Tiempo real activo',true);
@@ -119,7 +125,7 @@ async function syncCloud() {
     return false;
   }
 }
-async function initializeUserSession(user) {
+async function initializeUserSession(user,generation) {
   if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
   cloudSyncEnabled=false;
   document.querySelector('#user-email').textContent=user.email||'Usuario autorizado';
@@ -130,6 +136,7 @@ async function initializeUserSession(user) {
   document.querySelector('.auth-description').textContent='Conectando con los datos del taller en Firebase…';
   try {
     const remote=await readSharedState();
+    if(generation!==authGeneration || auth.currentUser?.uid!==user.uid) return;
     replaceAppStateFromCloud(remote.data);
     cloudSyncEnabled=true;
     setStatus(remote.exists
@@ -161,6 +168,7 @@ async function initializeUserSession(user) {
     authScreen.hidden=true;
     document.querySelector('.auth-description').textContent='Inicia sesión con la cuenta autorizada del taller.';
   } catch(error) {
+    if(generation!==authGeneration || auth.currentUser?.uid!==user.uid) return;
     cloudSyncEnabled=false;
     console.error(error);
     document.querySelector('.auth-description').textContent='No se pudo conectar con la base de datos de Agencia de Modelos 3D.';
@@ -218,7 +226,8 @@ if(isFirebaseConfigured) {
     await signOut(auth);
   });
   onAuthStateChanged(auth,user=>{
-    if(user)initializeUserSession(user);
+    const generation=++authGeneration;
+    if(user)initializeUserSession(user,generation);
     else {
       cloudSyncEnabled=false;
       if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
