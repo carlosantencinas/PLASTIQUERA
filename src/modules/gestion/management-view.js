@@ -413,6 +413,8 @@ function attachProducts(root) {
       appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
   });
   root.querySelector('#completed-jobs-table').addEventListener('change',e=>{
+    const productSelect=e.target.closest('[data-existing-product]');
+    if(productSelect){const jobId=productSelect.dataset.existingProduct;const product=getProduct(productSelect.value);const variantSelect=root.querySelector('[data-existing-variant="'+jobId+'"]');if(variantSelect){variantSelect.innerHTML='<option value="">Sin variante</option>'+getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');}return;}
     const type=e.target.closest('[data-new-type]');
     if(type){
       const codeField=root.querySelector('[data-new-code="'+type.dataset.newType+'"]');
