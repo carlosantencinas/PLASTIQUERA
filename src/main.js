@@ -178,12 +178,15 @@ document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('clic
 }));
 window.addEventListener('popstate',()=>navigate(location.hash));
 window.addEventListener('hashchange',()=>navigate(location.hash));
-window.addEventListener('plastiqueria:saved',()=>{
+window.addEventListener('plastiqueria:saved',event=>{
   markSharedStateDirty();
   const el=document.querySelector('#save-status');
   if(el)el.textContent='Guardando en Firebase…';
-  if(cloudSyncEnabled)syncCloud();
-  else if(el)el.textContent='Sin conexión a Firebase: cambio no guardado';
+  if(cloudSyncEnabled) event.detail.persistence=syncCloud();
+  else {
+    if(el)el.textContent='Sin conexión a Firebase: cambio no guardado';
+    event.detail.persistence=Promise.resolve(false);
+  }
 });
 window.addEventListener('appstate:loaded',()=>{
   if(modulesMounted) {
