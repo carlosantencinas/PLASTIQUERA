@@ -522,7 +522,7 @@ function attachSales(root) {
   if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
     const job=getJob(pendingSaleJobId);
     jobSel.value=pendingSaleJobId;
-    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]'))prodSel.value=job.data.productoId;
+    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]')){prodSel.value=job.data.productoId;refreshSaleVariants();if(job.data.variantId)variantSel.value=job.data.variantId;}
     const unit=Number(job?.calc?.precioUnitario||job?.calc?.precioVenta||0);
     if(unit>0)form.elements.monto.value=unit.toFixed(2);
     updatePrice();
