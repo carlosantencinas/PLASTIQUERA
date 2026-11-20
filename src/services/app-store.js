@@ -47,7 +47,6 @@ export function replaceAppStateFromCloud(data = {}) {
   appState.sales = Array.isArray(data.sales) ? data.sales : [];
   appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
     appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
-  appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
   loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
   // Los registros anteriores a los estados se consideran trabajos históricos ya realizados.
