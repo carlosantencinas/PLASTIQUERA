@@ -81,8 +81,11 @@ export function saveAppState({ dispatch = true } = {}) {
   // El guardado persistente se realiza exclusivamente en Firestore.
   // Esta función solo notifica a la capa de sincronización que el estado en memoria cambió.
   const savedAt = new Date().toISOString();
-  if (dispatch) window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt } }));
-  return true;
+  if (!dispatch) return true;
+  const detail = { savedAt, persistence: null };
+  window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail }));
+  // La capa cloud asigna una promesa que solo se resuelve tras confirmar Firestore.
+  return detail.persistence || Promise.resolve(false);
 }
 
 export function exportBackup() {
