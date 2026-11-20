@@ -1,6 +1,8 @@
+import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
-import { inventoryState } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger } from '../../calculations/commerce.js';
+import { inventoryState, applyProductionBatchMaterials, reverseProductionBatchMaterials } from '../../services/inventory-store.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, assertProductionBatchCanReverse, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
+import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -143,6 +145,7 @@ function products() {
   return `<div class="management-card product-sale-stock">
     <h3>Productos disponibles para vender</h3>
     <p class="management-help">Aquí aparecen los artículos terminados que tienen unidades disponibles. El stock se calcula con los trabajos asignados, las ventas y las entregas en consignación.</p>
+    <p class="management-help"><b>Control por variante:</b> cada variante mantiene sus propias existencias. Las piezas se suman desde los trabajos asignados a esa variante y se descuentan las ventas y consignaciones correspondientes. Los movimientos históricos sin variante permanecen sin clasificar y no se reparten automáticamente.</p>
     <div id="sellable-products-table" class="management-table-wrap"></div>
   </div>
   <div class="management-card production-control-card">
@@ -185,6 +188,7 @@ function sales() {
     <form class="management-card" id="sale-form"><h3>Registrar venta</h3>
       <label class="management-field">Trabajo asociado<select name="jobId" id="sale-job"><option value="">Venta independiente / sin trabajo</option>${appState.jobs.map(j=>`<option value="${esc(j.id)}">${esc(j.data.nombre)} — ${money(j.calc?.precioUnitario || j.calc?.precioVenta)}</option>`).join('')}</select></label>
       <label class="management-field">Producto (opcional)<select name="productoId" id="sale-product"><option value="">Sin producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${pendingSaleProductId===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
+      <label class="management-field">Variante<select name="variantId" id="sale-variant"><option value="">Selecciona producto primero</option></select></label>
       <label class="management-field">Cliente<input name="cliente" list="management-clients" placeholder="Nombre del cliente"><datalist id="management-clients">${appState.clients.map(c=>`<option value="${esc(c.nombre)}"></option>`).join('')}</datalist></label>
       <div class="management-form-row"><label class="management-field">Cantidad<input name="cantidad" type="number" min="1" step="1" value="1" required></label><label class="management-field">Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required></label></div>
       <div class="management-form-row"><label class="management-field">Fecha<input name="fecha" type="date" value="${dateValue()}"></label><label class="management-field">Método de pago<select name="metodoPago"><option>Efectivo</option><option>QR</option><option>Transferencia</option><option>Tarjeta</option><option>Otro</option></select></label></div>
@@ -201,6 +205,7 @@ function consignments() {
       <label class="management-field">Tienda<input name="tienda" list="management-stores" required><datalist id="management-stores">${appState.clients.filter(c=>c.tipo==='Tienda').map(c=>`<option value="${esc(c.nombre)}"></option>`).join('')}</datalist></label>
       <label class="management-field">Contacto<input name="contacto"></label>
       <label class="management-field">Producto<select name="productoId" id="cons-product"><option value="">Producto libre / sin código</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
+      <label class="management-field">Variante<select name="variantId" id="cons-variant"><option value="">Selecciona producto primero</option></select></label>
       <label class="management-field">Descripción libre<input name="productoLibre" placeholder="Descripción si no hay producto"></label>
       <div class="management-form-row"><label class="management-field">Cantidad<input name="cantidad" type="number" min="1" step="1" value="1" required></label><label class="management-field">Precio por unidad (Bs)<input name="precioUnitario" type="number" min="0.01" step="0.01" required></label></div>
       <div class="management-form-row"><label class="management-field">Fecha<input name="fecha" type="date" value="${dateValue()}"></label><label class="management-field">Monto pagado (Bs)<input name="montoPagado" type="number" min="0" step="0.01" value="0" required></label></div>
@@ -277,7 +282,7 @@ function renderCompletedJobs(root) {
         <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
           <option value="">Asignar producto existente</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
         </select>
-        <button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
+        <select data-existing-variant="${esc(job.id)}" aria-label="Variante de ${esc(job.data.nombre)}"><option value="">Sin variante</option>${getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'" '+(job.data.variantId===v.id?'selected':'')+'>'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('')}</select><button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
         <details class="production-new-product">
           <summary>Crear código nuevo</summary>
           <div class="production-new-fields">
@@ -288,15 +293,32 @@ function renderCompletedJobs(root) {
           </div>
         </details>
         ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
+        <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
+        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
+function printProductBarcode(product, variant = null) {
+  const code = String(variant?.codigo || product?.codigo || '').trim();
+  const labelName = variant ? product.nombre + ' · ' + variant.nombre : product?.nombre;
+  if (!code) { alert('Este registro no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
+  const popup = window.open('', '_blank', 'width=520,height=420');
+  if (!popup) { alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
+  popup.document.open();
+  popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiqueta ' + esc(code) + '</title><style>@page{size:70mm 40mm;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:5mm;text-align:center;color:#111}.name{font-weight:700;font-size:14px;margin-bottom:3mm}.code{font-size:11px;letter-spacing:.5px;margin-top:2mm}svg{max-width:100%;height:auto}.hint{font-size:9px;color:#555;margin-top:2mm}@media screen{body{max-width:70mm;margin:20px auto;border:1px solid #ddd}}</style></head><body><div class="name">' + esc(labelName) + '</div><svg id="product-barcode"></svg><div class="code">' + esc(code) + '</div><div class="hint">AM3D · Code 128 · ' + (variant ? 'Variante' : 'Producto') + '</div></body></html>');
+  popup.document.close();
+  try { JsBarcode(popup.document.getElementById('product-barcode'), code, {format:'CODE128',displayValue:false,margin:2,height:48,width:1.7}); }
+  catch (error) { popup.close(); alert('No se pudo generar el código de barras: ' + error.message); return; }
+  popup.focus(); popup.setTimeout(() => popup.print(), 300);
+}
 function renderProductsTable(root) {
   if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
-  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
+  root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Variantes / etiquetas</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
     const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
-    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
+    const variants=getProductVariants(p);
+    const variantRows=variants.map(v=>{const vs=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="product-variant-row"><span><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code><small>Producidas: ${vs.produced} · Vendidas: ${vs.sold} · En tienda: ${vs.consigned} · Disponibles: <b>${vs.available}</b></small></span><button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('');
+    return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small><button type="button" class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta padre</button></td><td>${variantRows || '<small>Sin variantes</small>'}<button type="button" class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 function renderAssignments(root) {
@@ -358,29 +380,132 @@ function attachProducts(root) {
     if(saleForm){saleForm.elements.productoId.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);document.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles.';saleForm.elements.cantidad.focus();}
   });
   form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=d.codigo.trim();
-    if(appState.products.some(p=>p.codigo.toLowerCase()===code.toLowerCase()&&p.id!==d.id)){alert('Ese código ya está registrado.');return;}
-    if(d.id){Object.assign(getProduct(d.id),{codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim()});}
-    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre:d.nombre.trim(),notas:d.notas.trim(),createdAt:Date.now()});
+    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
+    if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
+    const normalizedCode=code.toLocaleUpperCase('es');
+    if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
+    if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
+    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
   root.querySelector('#products-table').addEventListener('click',e=>{
-    const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]');
+    const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
+    const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
+    if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
+    if(variantBarcode){const product=getProduct(variantBarcode.dataset.variantBarcode);const variant=getProductVariants(product).find(item=>item.id===variantBarcode.dataset.variantId);if(product&&variant)printProductBarcode(product,variant);}
+    if(addVariant){
+      const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
+      const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
+      const code=prompt('Código/SKU único de esta variante (por ejemplo, '+product.codigo+'-NEG):');if(code===null)return;
+      try{
+        const values=validateVariantInput({code,name},appState.products);
+        if(!Array.isArray(product.variantes))product.variantes=[];
+        product.variantes.push({id:makeId('var'),...values,activo:true,createdAt:Date.now()});
+        saveAppState();renderManagementView(root,'products');notify('Variante guardada. Ya puedes imprimir su etiqueta individual.');
+      }catch(error){alert(error.message);}
+      return;
+    }
     if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
-      if(appState.sales.some(s=>s.productoId===id)||appState.consignments.some(c=>c.productoId===id)){alert('No se puede eliminar un producto con ventas o consignaciones asociadas. Conserva el historial comercial.');return;}
-      if(!confirm('¿Eliminar producto? Los trabajos asociados quedarán sin producto.'))return;
-      appState.jobs.forEach(j=>{if(j.data.productoId===id)j.data.productoId=null;});
+      const hasSales=appState.sales.some(s=>s.productoId===id);
+      const hasConsignments=appState.consignments.some(c=>c.productoId===id);
+      const hasJobs=appState.jobs.some(j=>j.data?.productoId===id);
+      if(hasSales||hasConsignments||hasJobs){alert('No se puede eliminar este producto porque tiene historial comercial o trabajos vinculados. Para conservar la trazabilidad, mantenlo en el catálogo; más adelante se podrá marcar como inactivo.');return;}
+      if(!confirm('¿Eliminar este producto sin movimientos ni trabajos asociados?'))return;
       appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
   });
   root.querySelector('#completed-jobs-table').addEventListener('change',e=>{
+    const productSelect=e.target.closest('[data-existing-product]');
+    if(productSelect){const jobId=productSelect.dataset.existingProduct;const product=getProduct(productSelect.value);const variantSelect=root.querySelector('[data-existing-variant="'+jobId+'"]');if(variantSelect){variantSelect.innerHTML='<option value="">Sin variante</option>'+getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');}return;}
     const type=e.target.closest('[data-new-type]');
     if(type){
       const codeField=root.querySelector('[data-new-code="'+type.dataset.newType+'"]');
       if(codeField)codeField.value=nextProductCode(type.value);
     }
   });
-  root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+  root.querySelector('#completed-jobs-table').addEventListener('click',async e=>{
+    const reverseButton=e.target.closest('[data-reverse-production-batch]');
+    if(reverseButton){
+      const job=getJob(reverseButton.dataset.reverseProductionBatch);
+      const batch=job?.data?.productionBatches?.find(item=>item.id===reverseButton.dataset.batchId);
+      if(!job||!batch){alert('No se encontró el trabajo o lote.');return;}
+      if(batch.status==='reversed'){alert('Este lote ya está revertido.');return;}
+      let quantity;
+      try{
+        ({quantity}=assertProductionBatchCanReverse(job,batch,appState.jobs,appState.sales,appState.consignments));
+      }catch(error){alert('No se puede revertir: '+error.message);return;}
+      const reason=prompt('Motivo de la reversión del lote:');
+      if(reason===null)return;
+      const reversalId=makeId('reversion-lote');
+      const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
+      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
+      reverseButton.disabled=true;
+      try{
+        const event=reverseProductionBatch(batch,reason,reversalId);
+        reverseProductionBatchMaterials(batch,reversalId);
+        if(!Array.isArray(job.data.productionBatchReversals))job.data.productionBatchReversals=[];
+        job.data.productionBatchReversals.push(event);
+        batch.status='reversed';
+        batch.reversedAt=event.date;
+        batch.reversalId=reversalId;
+        job.updatedAt=Date.now();
+        const persisted=await saveAppState();
+        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
+        renderManagementView(root,'products');
+        notify('Lote revertido y guardado en Firestore.');
+      }catch(error){
+        job.data=previousJobData;
+        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
+        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
+        alert('No se pudo completar la reversión: '+error.message);
+        renderManagementView(root,'products');
+      }
+      return;
+    }
+    const batchButton=e.target.closest('[data-production-batch]');
+    if(batchButton){
+      const job=getJob(batchButton.dataset.productionBatch);
+      if(!job?.data){alert('No se encontró el trabajo.');return;}
+      const produced=Number(prompt('¿Cuántas piezas se produjeron en esta reimpresión?', '1'));
+      if(!Number.isSafeInteger(produced)||produced<=0){alert('La cantidad producida debe ser un entero mayor que cero.');return;}
+      const failedInput=prompt('¿Cuántas piezas fallaron?', '0');
+      if(failedInput===null)return;
+      const failed=Number(failedInput);
+      if(!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('La cantidad fallida debe ser un entero entre cero y lo producido.');return;}
+      const consumptions=[];
+      const materials=inventoryState.materials.filter(m=>m.unidad==='g'&&Number(m.stock)>0);
+      for(const material of materials){
+        const gramsInput=prompt('Gramos consumidos de '+material.nombre+' (stock: '+Number(material.stock).toFixed(1)+' g). Deja vacío si no se utilizó:','');
+        if(gramsInput===null)return;
+        if(!gramsInput.trim())continue;
+        const grams=Number(gramsInput);
+        if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
+        consumptions.push({materialId:material.id,grams});
+      }
+      const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
+      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
+      batchButton.disabled=true;
+      try{
+        if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
+        const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions},job.data.productionBatches);
+        applyProductionBatchMaterials(job,batch);
+        job.data.productionBatches.push(batch);
+        job.updatedAt=Date.now();
+        const persisted=await saveAppState();
+        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
+        renderManagementView(root,'products');
+        notify('Reimpresión registrada y guardada: '+batch.sellableQuantity+' piezas vendibles.');
+      }catch(error){
+        job.data=previousJobData;
+        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
+        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
+        alert('No se pudo registrar la reimpresión: '+error.message);
+        renderManagementView(root,'products');
+      }
+      return;
+    }
     const sellJob=e.target.closest('[data-sell-job]');
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
@@ -408,6 +533,10 @@ function attachProducts(root) {
       const product=appState.products.find(item=>item.id===productId);
       if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
       job.data.productoId=product.id;
+      const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');
+      const variantId=String(variantSelect?.value||'');
+      if(variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante no pertenece al producto seleccionado.');return;}
+      job.data.variantId=variantId||null;
       saveAppState();
       // Actualiza los dos listados desde el mismo estado en memoria inmediatamente.
       renderSellableProductsTable(root.querySelector('#sellable-products-table'));
@@ -454,7 +583,9 @@ function attachClients(root) {
   });
 }
 function attachSales(root) {
-  const form=root.querySelector('#sale-form'), jobSel=form.elements.jobId, prodSel=form.elements.productoId;
+  const form=root.querySelector('#sale-form'), jobSel=form.elements.jobId, prodSel=form.elements.productoId, variantSel=form.elements.variantId;
+  const refreshSaleVariants=()=>{const p=getProduct(prodSel.value);const variants=getProductVariants(p);variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');variantSel.required=variants.length>0;};
+  prodSel.addEventListener('change',refreshSaleVariants);refreshSaleVariants();
   function updatePrice(){
     const job=getJob(jobSel.value);if(!job)return;
     const amount=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
@@ -468,14 +599,17 @@ function attachSales(root) {
     const job=getJob(d.jobId);if(job){try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}}
     const product=getProduct(d.productoId);
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
-    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
+    if(job?.data?.variantId&&d.variantId!==job.data.variantId){alert('La variante seleccionada no coincide con la variante asignada al trabajo.');return;}
+    const variantId=String(d.variantId||'');
+    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
+    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
+    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
     appState.sales.push(sale);pendingSaleProductId=null;pendingSaleJobId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
   if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
     const job=getJob(pendingSaleJobId);
     jobSel.value=pendingSaleJobId;
-    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]'))prodSel.value=job.data.productoId;
+    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]')){prodSel.value=job.data.productoId;refreshSaleVariants();if(job.data.variantId)variantSel.value=job.data.variantId;}
     const unit=Number(job?.calc?.precioUnitario||job?.calc?.precioVenta||0);
     if(unit>0)form.elements.monto.value=unit.toFixed(2);
     updatePrice();
@@ -491,7 +625,9 @@ function attachSales(root) {
   root.querySelector('#sales-csv').addEventListener('click',()=>downloadCsv('ventas.csv',['Fecha','Cliente','Producto','Trabajo','Cantidad','Precio unitario','Monto','Método de pago','Vendido por','Notas'],appState.sales.map(s=>[dateText(s.fecha),s.cliente,s.productoNombre,s.jobNombre,s.cantidad,Number(s.monto||0)/Number(s.cantidad||1),s.monto,s.metodoPago,s.vendidoPor,s.notas])));
 }
 function attachConsignments(root) {
-  const form=root.querySelector('#consignment-form'), productSel=form.elements.productoId;
+  const form=root.querySelector('#consignment-form'), productSel=form.elements.productoId, variantSel=form.elements.variantId;
+  const refreshConsignmentVariants=()=>{const p=getProduct(productSel.value);const variants=getProductVariants(p);variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');variantSel.required=variants.length>0;};
+  productSel.addEventListener('change',refreshConsignmentVariants);refreshConsignmentVariants();
   productSel.addEventListener('change',()=>{const p=getProduct(productSel.value);if(p)form.elements.productoLibre.value=p.codigo+' — '+p.nombre;});
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const product=getProduct(d.productoId);
@@ -499,9 +635,11 @@ function attachConsignments(root) {
     try{qty=positiveInteger(d.cantidad);}catch(error){alert(error.message);return;}
     const price=Number(d.precioUnitario),paid=Number(d.montoPagado);
     if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
-    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
+    const variantId=String(d.variantId||'');
+    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para consignar.');return;}
+    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const consignmentDate=d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now();
-    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
+    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,variantId:variantId||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
   });
   root.querySelector('#consignments-table').addEventListener('click',e=>{

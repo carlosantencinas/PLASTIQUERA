@@ -13,6 +13,8 @@ import {
   applyJobMaterial,
   applyJobMaterials,
   removeJobMaterial,
+  applyProductionBatchMaterials,
+  reverseProductionBatchMaterials,
 } from '../src/services/inventory-store.js';
 
 test('normaliza kg y litros a gramos y mililitros', () => {
@@ -164,4 +166,52 @@ test('si falta stock en un color, no modifica ninguno de los stocks ni pierde lo
   assert.equal(inventoryState.materials.find(item => item.id === 'black').stock, 90);
   assert.equal(inventoryState.materials.find(item => item.id === 'white').stock, 3);
   assert.equal(inventoryState.jobMovements.length, 2);
+});
+
+
+test('lote adicional descuenta material una sola vez y no modifica el consumo original', () => {
+  loadInventorySnapshot({
+    materials: [{ id: 'pla', nombre: 'PLA negro', categoria: 'Filamento', unidad: 'g', stock: 1000, costoPromedio: 0.12 }],
+    jobMovements: [{ id: 'original', jobId: 'job-1', materialId: 'pla', grams: 200, costoTotal: 24 }],
+  });
+  const job = { id: 'job-1', data: { nombre: 'Figura', gramos: 200 } };
+  const batch = { id: 'batch-1', jobId: 'job-1', date: Date.now(), status: 'active', materialConsumptions: [{ materialId: 'pla', grams: 150 }] };
+  const first = applyProductionBatchMaterials(job, batch);
+  const retry = applyProductionBatchMaterials(job, batch);
+  assert.equal(first.length, 1);
+  assert.equal(retry.length, 1);
+  assert.equal(inventoryState.materials[0].stock, 850);
+  assert.equal(inventoryState.jobMovements.length, 2);
+  assert.equal(inventoryState.jobMovements.find(item => item.id === 'original').grams, 200);
+});
+
+test('lote con stock insuficiente no descuenta ningún material', () => {
+  loadInventorySnapshot({ materials: [
+    { id: 'pla', nombre: 'PLA negro', unidad: 'g', stock: 100, costoPromedio: 0.12 },
+    { id: 'petg', nombre: 'PETG blanco', unidad: 'g', stock: 5, costoPromedio: 0.14 },
+  ] });
+  const job = { id: 'job-2', data: { nombre: 'Pieza doble' } };
+  const batch = { id: 'batch-2', jobId: 'job-2', status: 'active', materialConsumptions: [
+    { materialId: 'pla', grams: 20 }, { materialId: 'petg', grams: 10 },
+  ] };
+  assert.throws(() => applyProductionBatchMaterials(job, batch), /Stock insuficiente de PETG blanco/);
+  assert.equal(inventoryState.materials.find(item => item.id === 'pla').stock, 100);
+  assert.equal(inventoryState.materials.find(item => item.id === 'petg').stock, 5);
+  assert.equal(inventoryState.jobMovements.length, 0);
+});
+
+test('revertir consumo de lote restaura material con movimiento compensatorio trazable', () => {
+  loadInventorySnapshot({ materials: [
+    { id: 'pla', nombre: 'PLA negro', unidad: 'g', stock: 1000, costoPromedio: 0.12 },
+  ] });
+  const job = { id: 'job-3', data: { nombre: 'Figura' } };
+  const batch = { id: 'batch-3', jobId: 'job-3', status: 'active', materialConsumptions: [{ materialId: 'pla', grams: 125 }] };
+  applyProductionBatchMaterials(job, batch);
+  const compensation = reverseProductionBatchMaterials(batch, 'reversal-3');
+  assert.equal(inventoryState.materials[0].stock, 1000);
+  assert.equal(compensation.length, 1);
+  assert.equal(compensation[0].grams, -125);
+  assert.equal(compensation[0].productionBatchReversalOf, 'batch-3');
+  assert.equal(inventoryState.jobMovements.length, 2);
+  assert.throws(() => reverseProductionBatchMaterials(batch, 'reversal-4'), /ya fue revertido/);
 });

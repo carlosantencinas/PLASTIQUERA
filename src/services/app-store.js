@@ -1,4 +1,5 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
+import { validateBackupData } from './backup-validation.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({ precioKwh: 0.70, potenciaW: 1450, mantenimientoHora: 1.50, tarifaHora: 20, horasTrabajo: 0.5, fallas: 10, margen: 40, precioFilamentoKg: 95 });
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [], settings: { ...DEFAULT_SETTINGS } };
@@ -47,7 +48,6 @@ export function replaceAppStateFromCloud(data = {}) {
   appState.sales = Array.isArray(data.sales) ? data.sales : [];
   appState.consignments = Array.isArray(data.consignments) ? data.consignments : (Array.isArray(data.consignaciones) ? data.consignaciones : []);
     appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
-  appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
   appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
   loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
   // Los registros anteriores a los estados se consideran trabajos históricos ya realizados.
@@ -81,8 +81,11 @@ export function saveAppState({ dispatch = true } = {}) {
   // El guardado persistente se realiza exclusivamente en Firestore.
   // Esta función solo notifica a la capa de sincronización que el estado en memoria cambió.
   const savedAt = new Date().toISOString();
-  if (dispatch) window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail: { savedAt } }));
-  return true;
+  if (!dispatch) return true;
+  const detail = { savedAt, persistence: null };
+  window.dispatchEvent(new CustomEvent('plastiqueria:saved', { detail }));
+  // La capa cloud asigna una promesa que solo se resuelve tras confirmar Firestore.
+  return detail.persistence || Promise.resolve(false);
 }
 
 export function exportBackup() {
@@ -113,26 +116,43 @@ export function exportBackup() {
 export function importBackup(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      const previous = JSON.parse(JSON.stringify({
+        jobs: appState.jobs, products: appState.products, clients: appState.clients,
+        sales: appState.sales, consignments: appState.consignments, expenses: appState.expenses,
+        settings: appState.settings, materials: inventoryState.materials,
+        purchases: inventoryState.purchases, jobMovements: inventoryState.jobMovements,
+      }));
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
-        const arrays = ['jobs','products','productos','clients','clientes','sales','consignments','consignaciones','expenses','materials','purchases','jobMovements'];
-        if (!arrays.some(key => Array.isArray(data[key]))) throw new Error('No se encontraron datos de Plastiquería en el archivo.');
-        appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
-        appState.products = Array.isArray(data.products) ? data.products : (data.productos || []);
-        appState.clients = Array.isArray(data.clients) ? data.clients : (data.clientes || []);
-        appState.sales = Array.isArray(data.sales) ? data.sales : [];
-        appState.consignments = Array.isArray(data.consignments) ? data.consignments : (data.consignaciones || []);
-        appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+        const validated = validateBackupData(data);
+        const { jobs, products, clients, sales, consignments, expenses, materials, purchases, jobMovements } = validated;
+        appState.jobs.splice(0, appState.jobs.length, ...jobs);
+        appState.products = products;
+        appState.clients = clients;
+        appState.sales = sales;
+        appState.consignments = consignments;
+        appState.expenses = expenses;
         appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
-        loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
+        loadInventorySnapshot({ materials, purchases, jobMovements });
         normalizeConsignments();
         linkClientRecords();
         restoreLegacyJobMovements();
-        if (!saveAppState()) throw new Error('No se pudo guardar el respaldo importado en este navegador.');
+        const persisted = await saveAppState();
+        if (!persisted) throw new Error('Firestore no confirmó la importación. Se restauró el estado anterior en pantalla; conserva esta sesión y revisa la conexión.');
         resolve(true);
-      } catch (error) { reject(error); }
+      } catch (error) {
+        appState.jobs.splice(0, appState.jobs.length, ...previous.jobs);
+        appState.products = previous.products;
+        appState.clients = previous.clients;
+        appState.sales = previous.sales;
+        appState.consignments = previous.consignments;
+        appState.expenses = previous.expenses;
+        appState.settings = previous.settings;
+        loadInventorySnapshot({ materials: previous.materials, purchases: previous.purchases, jobMovements: previous.jobMovements });
+        reject(error);
+      }
     };
     reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
     reader.readAsText(file);

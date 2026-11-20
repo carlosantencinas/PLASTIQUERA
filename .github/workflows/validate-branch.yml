@@ -1,0 +1,36 @@
+name: Validar rama de trabajo
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [refactor/etapa-0-auditoria]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependencias
+        run: npm install
+      - name: Ejecutar pruebas
+        run: npm test
+      - name: Compilar sin publicar
+        run: npm run build
+      - name: Verificar artefactos
+        run: |
+          test -f dist/index.html
+          test -f dist/manifest.webmanifest
+          test -f dist/icon.svg

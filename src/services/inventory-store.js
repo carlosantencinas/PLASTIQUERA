@@ -199,3 +199,104 @@ export function getInventorySummary(now = new Date()) {
     jobConsumption: inventoryState.jobMovements.reduce((sum, item) => sum + item.costoTotal, 0),
   };
 }
+
+
+/**
+ * Registra el consumo adicional de un lote sin tocar los movimientos del trabajo
+ * original. La clave del lote hace que los reintentos sean idempotentes.
+ */
+export function applyProductionBatchMaterials(job, batch) {
+  if (!job?.id || !batch?.id || batch.jobId !== job.id) throw new Error('El lote no corresponde a un trabajo válido.');
+  if (batch.status !== 'active') throw new Error('Solo se puede consumir material para un lote activo.');
+  const existing = inventoryState.jobMovements.filter(item => item.productionBatchId === batch.id);
+  if (existing.length) {
+    const expected = Array.isArray(batch.materialConsumptions) ? batch.materialConsumptions : [];
+    const actual = new Map();
+    for (const movement of existing) {
+      if (movement.movementType !== 'production-batch-consumption') throw new Error('El lote tiene movimientos incompatibles; requiere revisión.');
+      actual.set(movement.materialId, (actual.get(movement.materialId) || 0) + Number(movement.grams || 0));
+    }
+    const requested = new Map();
+    for (const row of expected) requested.set(row.materialId, (requested.get(row.materialId) || 0) + Number(row.grams || 0));
+    if (actual.size !== requested.size || [...requested].some(([id, grams]) => Math.abs((actual.get(id) || 0) - grams) > 1e-9)) {
+      throw new Error('El lote ya tiene movimientos distintos a su consumo registrado.');
+    }
+    return existing;
+  }
+
+  const rows = Array.isArray(batch.materialConsumptions) ? batch.materialConsumptions : [];
+  const totals = new Map();
+  for (const row of rows) {
+    const materialId = String(row?.materialId || '').trim();
+    const grams = Number(row?.grams);
+    if (!materialId || !Number.isFinite(grams) || grams <= 0) throw new Error('Cada consumo del lote requiere material y gramos mayores que cero.');
+    totals.set(materialId, (totals.get(materialId) || 0) + grams);
+  }
+  for (const [materialId, grams] of totals) {
+    const material = getMaterialById(materialId);
+    if (!material) throw new Error('No se encontró uno de los materiales del lote.');
+    if (material.unidad !== 'g') throw new Error(`El material ${material.nombre} no está expresado en gramos.`);
+    if (grams > Number(material.stock || 0) + 1e-9) throw new Error(`Stock insuficiente de ${material.nombre}. Disponible: ${Number(material.stock || 0).toFixed(2)} g; solicitado: ${grams.toFixed(2)} g.`);
+  }
+
+  const movements = [];
+  for (const [materialId, grams] of totals) {
+    const material = getMaterialById(materialId);
+    material.stock = Math.max(0, Number(material.stock || 0) - grams);
+    const movement = {
+      id: makeId('lote-consumo'), jobId: job.id, jobNombre: String(job.data?.nombre || ''),
+      productionBatchId: batch.id, movementType: 'production-batch-consumption',
+      materialId, materialNombre: material.nombre, materialColor: '',
+      source: 'production-batch', grams, costoUnitario: Number(material.costoPromedio || 0),
+      costoTotal: grams * Number(material.costoPromedio || 0), fecha: Number(batch.date) || Date.now(),
+    };
+    inventoryState.jobMovements.push(movement);
+    movements.push(movement);
+  }
+  return movements;
+}
+
+/**
+ * Revierte solo el consumo del lote indicado mediante movimientos compensatorios.
+ * No elimina movimientos y no cambia el estado/cantidad vendible del lote: el
+ * llamador debe comprobar antes que las unidades adicionales no estén comprometidas.
+ */
+export function reverseProductionBatchMaterials(batch, reversalId) {
+  if (!batch?.id) throw new Error('Selecciona un lote válido.');
+  const id = String(reversalId || '').trim();
+  if (!id) throw new Error('La reversión requiere un identificador.');
+  const original = inventoryState.jobMovements.filter(item =>
+    item.productionBatchId === batch.id && item.movementType === 'production-batch-consumption'
+  );
+  if (!original.length && (batch.materialConsumptions || []).length) throw new Error('No se encontraron los consumos originales del lote.');
+  if (inventoryState.jobMovements.some(item => item.productionBatchReversalId === id)) {
+    throw new Error('El identificador de reversión ya fue utilizado.');
+  }
+  const alreadyReversed = inventoryState.jobMovements.some(item =>
+    item.productionBatchReversalOf === batch.id
+  );
+  if (alreadyReversed) throw new Error('El consumo de este lote ya fue revertido.');
+  const restored = [];
+  for (const movement of original) {
+    const material = getMaterialById(movement.materialId);
+    if (!material) throw new Error('No se encontró un material necesario para revertir el lote.');
+    if (!Number.isFinite(Number(movement.grams)) || Number(movement.grams) <= 0) throw new Error('El movimiento original del lote no es válido.');
+  }
+  for (const movement of original) {
+    const material = getMaterialById(movement.materialId);
+    const grams = Number(movement.grams);
+    material.stock = Number(material.stock || 0) + grams;
+    const compensation = {
+      id: makeId('lote-reversion'), jobId: movement.jobId, jobNombre: movement.jobNombre,
+      productionBatchId: batch.id, productionBatchReversalId: id,
+      productionBatchReversalOf: batch.id, movementType: 'production-batch-consumption-reversal',
+      materialId: material.id, materialNombre: material.nombre, materialColor: movement.materialColor || '',
+      source: 'production-batch-reversal', grams: -grams,
+      costoUnitario: Number(movement.costoUnitario || 0), costoTotal: -Number(movement.costoTotal || 0),
+      fecha: Date.now(),
+    };
+    inventoryState.jobMovements.push(compensation);
+    restored.push(compensation);
+  }
+  return restored;
+}
