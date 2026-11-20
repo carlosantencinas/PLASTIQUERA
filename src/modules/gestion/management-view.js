@@ -423,7 +423,7 @@ function attachProducts(root) {
       if(codeField)codeField.value=nextProductCode(type.value);
     }
   });
-  root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+  root.querySelector('#completed-jobs-table').addEventListener('click',async e=>{
     const reverseButton=e.target.closest('[data-reverse-production-batch]');
     if(reverseButton){
       const job=getJob(reverseButton.dataset.reverseProductionBatch);
@@ -437,6 +437,10 @@ function attachProducts(root) {
       const reason=prompt('Motivo de la reversión del lote:');
       if(reason===null)return;
       const reversalId=makeId('reversion-lote');
+      const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
+      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
+      reverseButton.disabled=true;
       try{
         const event=reverseProductionBatch(batch,reason,reversalId);
         reverseProductionBatchMaterials(batch,reversalId);
@@ -446,10 +450,17 @@ function attachProducts(root) {
         batch.reversedAt=event.date;
         batch.reversalId=reversalId;
         job.updatedAt=Date.now();
-        saveAppState();
+        const persisted=await saveAppState();
+        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
         renderManagementView(root,'products');
-        notify('Lote revertido. Se restituyeron sus materiales y se descontaron sus piezas vendibles.');
-      }catch(error){alert('No se pudo revertir el lote: '+error.message);}
+        notify('Lote revertido y guardado en Firestore.');
+      }catch(error){
+        job.data=previousJobData;
+        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
+        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
+        alert('No se pudo completar la reversión: '+error.message);
+        renderManagementView(root,'products');
+      }
       return;
     }
     const batchButton=e.target.closest('[data-production-batch]');
@@ -472,16 +483,27 @@ function attachProducts(root) {
         if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
         consumptions.push({materialId:material.id,grams});
       }
+      const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
+      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
+      batchButton.disabled=true;
       try{
         if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
         const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions},job.data.productionBatches);
         applyProductionBatchMaterials(job,batch);
         job.data.productionBatches.push(batch);
         job.updatedAt=Date.now();
-        saveAppState();
+        const persisted=await saveAppState();
+        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
         renderManagementView(root,'products');
-        notify('Reimpresión registrada: '+batch.sellableQuantity+' piezas vendibles.');
-      }catch(error){alert(error.message);}
+        notify('Reimpresión registrada y guardada: '+batch.sellableQuantity+' piezas vendibles.');
+      }catch(error){
+        job.data=previousJobData;
+        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
+        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
+        alert('No se pudo registrar la reimpresión: '+error.message);
+        renderManagementView(root,'products');
+      }
       return;
     }
     const sellJob=e.target.closest('[data-sell-job]');
