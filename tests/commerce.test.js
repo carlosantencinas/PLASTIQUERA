@@ -66,3 +66,32 @@ test('venta sin variante vinculada a trabajo usa la variante del trabajo', async
   const sales = [{ id: 's1', jobId: 'j-negro', cantidad: 2 }];
   assert.equal(getProductVariantStock('p1', 'negro', variantJobs, sales, []).available, 4);
 });
+
+
+test('lotes adicionales suman stock sin alterar producción original y admiten reversión trazable', async () => {
+  const { getJobSellableQuantity, createProductionBatch, reverseProductionBatch } = await import('../src/calculations/commerce.js');
+  const job = { id: 'job-1', data: { piezasVendibles: 4, productionBatches: [] } };
+  const batch = createProductionBatch(job, {
+    id: 'batch-1', date: 1795132800000, producedQuantity: 6, failedQuantity: 1,
+    materialConsumptions: [{ materialId: 'pla-black', grams: 120 }, { materialId: 'pla-black', grams: 30 }],
+  }, job.data.productionBatches);
+  job.data.productionBatches.push(batch);
+  assert.equal(getJobSellableQuantity(job), 9);
+  assert.deepEqual(batch.materialConsumptions, [{ materialId: 'pla-black', grams: 150 }]);
+  assert.throws(() => createProductionBatch(job, {
+    id: 'batch-1', producedQuantity: 2, failedQuantity: 0,
+  }, job.data.productionBatches), /ya existe/);
+  const reversal = reverseProductionBatch(batch, 'Registro duplicado', 'rev-1');
+  assert.deepEqual({ batchId: reversal.batchId, reason: reversal.reason, type: reversal.type }, {
+    batchId: 'batch-1', reason: 'Registro duplicado', type: 'production-batch-reversal',
+  });
+  batch.status = 'reversed';
+  assert.equal(getJobSellableQuantity(job), 4);
+});
+
+test('un lote rechaza cantidades inconsistentes y consumo de material inválido', async () => {
+  const { createProductionBatch } = await import('../src/calculations/commerce.js');
+  const job = { id: 'job-1', data: { piezasVendibles: 2 } };
+  assert.throws(() => createProductionBatch(job, { id: 'b1', producedQuantity: 3, failedQuantity: 4 }), /fallidas/);
+  assert.throws(() => createProductionBatch(job, { id: 'b2', producedQuantity: 3, materialConsumptions: [{ materialId: 'pla', grams: 0 }] }), /gramos mayores/);
+});
