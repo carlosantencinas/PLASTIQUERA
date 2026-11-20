@@ -116,7 +116,7 @@ export function exportBackup() {
 export function importBackup(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
@@ -133,7 +133,8 @@ export function importBackup(file) {
         normalizeConsignments();
         linkClientRecords();
         restoreLegacyJobMovements();
-        if (!saveAppState()) throw new Error('No se pudo guardar el respaldo importado en este navegador.');
+        const persisted = await saveAppState();
+        if (!persisted) throw new Error('Firestore no confirmó la importación del respaldo. Conserva esta sesión y revisa la conexión antes de continuar.');
         resolve(true);
       } catch (error) { reject(error); }
     };
