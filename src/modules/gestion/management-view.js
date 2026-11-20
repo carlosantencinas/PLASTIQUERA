@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
-import { inventoryState, applyProductionBatchMaterials } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, createProductionBatch } from '../../calculations/commerce.js';
+import { inventoryState, applyProductionBatchMaterials, reverseProductionBatchMaterials } from '../../services/inventory-store.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -294,7 +294,7 @@ function renderCompletedJobs(root) {
         </details>
         ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
         <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
-        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small></li>';}).join('')+'</ul></details>' : ''}
+        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -424,6 +424,42 @@ function attachProducts(root) {
     }
   });
   root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+    const reverseButton=e.target.closest('[data-reverse-production-batch]');
+    if(reverseButton){
+      const job=getJob(reverseButton.dataset.reverseProductionBatch);
+      const batch=job?.data?.productionBatches?.find(item=>item.id===reverseButton.dataset.batchId);
+      if(!job||!batch){alert('No se encontró el trabajo o lote.');return;}
+      if(batch.status==='reversed'){alert('Este lote ya está revertido.');return;}
+      const quantity=Number(batch.sellableQuantity||0);
+      if(!Number.isSafeInteger(quantity)||quantity<=0){alert('La cantidad vendible del lote no es válida; requiere revisión manual.');return;}
+      const soldForJob=appState.sales.filter(sale=>sale.jobId===job.id).reduce((sum,sale)=>sum+Number(sale.cantidad||1),0);
+      const jobAvailable=Math.max(0,getJobSellableQuantity(job)-soldForJob);
+      if(quantity>jobAvailable){alert('No se puede revertir: el trabajo no tiene suficientes unidades disponibles sin comprometer ventas. Disponibles: '+jobAvailable+'.');return;}
+      if(job.data.productoId&&job.data.variantId){
+        const variantStock=getProductVariantStock(job.data.productoId,job.data.variantId,appState.jobs,appState.sales,appState.consignments);
+        if(quantity>variantStock.available){alert('No se puede revertir: la variante tiene unidades vendidas o consignadas. Disponibles: '+variantStock.available+'.');return;}
+      }else if(job.data.productoId){
+        const productStock=getProductStock(job.data.productoId,appState.jobs,appState.sales,appState.consignments);
+        if(quantity>productStock.available){alert('No se puede revertir: el producto tiene unidades vendidas o consignadas. Disponibles: '+productStock.available+'.');return;}
+      }
+      const reason=prompt('Motivo de la reversión del lote:');
+      if(reason===null)return;
+      const reversalId=makeId('reversion-lote');
+      try{
+        const event=reverseProductionBatch(batch,reason,reversalId);
+        reverseProductionBatchMaterials(batch,reversalId);
+        if(!Array.isArray(job.data.productionBatchReversals))job.data.productionBatchReversals=[];
+        job.data.productionBatchReversals.push(event);
+        batch.status='reversed';
+        batch.reversedAt=event.date;
+        batch.reversalId=reversalId;
+        job.updatedAt=Date.now();
+        saveAppState();
+        renderManagementView(root,'products');
+        notify('Lote revertido. Se restituyeron sus materiales y se descontaron sus piezas vendibles.');
+      }catch(error){alert('No se pudo revertir el lote: '+error.message);}
+      return;
+    }
     const batchButton=e.target.closest('[data-production-batch]');
     if(batchButton){
       const job=getJob(batchButton.dataset.productionBatch);
