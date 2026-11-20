@@ -221,6 +221,7 @@ if(isFirebaseConfigured) {
     }
   });
   document.querySelector('#logout-button').addEventListener('click',async()=>{
+    authGeneration++;
     cloudSyncEnabled=false;
     if(unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
     await signOut(auth);
