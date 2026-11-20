@@ -515,6 +515,7 @@ function attachSales(root) {
     const job=getJob(d.jobId);if(job){try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}}
     const product=getProduct(d.productoId);
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
+    if(job?.data?.variantId&&d.variantId!==job.data.variantId){alert('La variante seleccionada no coincide con la variante asignada al trabajo.');return;}
     const variantId=String(d.variantId||'');
     if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
     if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
