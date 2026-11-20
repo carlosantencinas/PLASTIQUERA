@@ -7,10 +7,58 @@ export function positiveInteger(value, label = 'La cantidad') {
 export function getJobSellableQuantity(job) {
   const data = job?.data || {};
   const explicit = data.piezasVendibles;
-  const quantity = explicit !== undefined && explicit !== null
+  const original = explicit !== undefined && explicit !== null
     ? Number(explicit)
     : Number(data.piezas ?? 1) - Number(data.piezasFallidas ?? 0);
-  return Number.isFinite(quantity) ? Math.max(0, quantity) : 0;
+  const base = Number.isFinite(original) ? Math.max(0, original) : 0;
+  // Cada reimpresión es un lote adicional; las anulaciones se registran
+  // como eventos de reversión y nunca borran el lote original.
+  const batches = Array.isArray(data.productionBatches) ? data.productionBatches : [];
+  const additional = batches.reduce((sum, batch) => {
+    if (batch.status === 'reversed') return sum;
+    const quantity = Number(batch.sellableQuantity);
+    return sum + (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 0);
+  }, 0);
+  return base + additional;
+}
+
+export function createProductionBatch(job, input, existingBatches = []) {
+  if (!job?.id || !job?.data) throw new Error('Selecciona un trabajo válido.');
+  const produced = Number(input?.producedQuantity);
+  const failed = Number(input?.failedQuantity ?? 0);
+  if (!Number.isSafeInteger(produced) || produced <= 0) throw new Error('La cantidad producida debe ser un entero mayor que cero.');
+  if (!Number.isSafeInteger(failed) || failed < 0 || failed > produced) throw new Error('Las piezas fallidas deben ser un entero entre cero y la cantidad producida.');
+  const batchId = String(input?.id || '').trim();
+  if (!batchId || existingBatches.some(batch => batch.id === batchId)) throw new Error('El identificador del lote falta o ya existe.');
+  const date = Number(input?.date || Date.now());
+  if (!Number.isFinite(date) || date <= 0) throw new Error('La fecha del lote no es válida.');
+  const consumptions = Array.isArray(input?.materialConsumptions) ? input.materialConsumptions.map(row => {
+    const materialId = String(row?.materialId || '').trim();
+    const grams = Number(row?.grams);
+    if (!materialId || !Number.isFinite(grams) || grams <= 0) throw new Error('Cada consumo del lote requiere un material y gramos mayores que cero.');
+    return { materialId, grams };
+  }) : [];
+  const merged = new Map();
+  for (const row of consumptions) merged.set(row.materialId, (merged.get(row.materialId) || 0) + row.grams);
+  return {
+    id: batchId,
+    jobId: job.id,
+    date,
+    producedQuantity: produced,
+    failedQuantity: failed,
+    sellableQuantity: produced - failed,
+    materialConsumptions: [...merged].map(([materialId, grams]) => ({ materialId, grams })),
+    status: 'active',
+    createdAt: Date.now(),
+  };
+}
+
+export function reverseProductionBatch(batch, reason, reversalId) {
+  if (!batch?.id || batch.status === 'reversed') throw new Error('El lote no existe o ya fue revertido.');
+  const note = String(reason || '').trim();
+  const id = String(reversalId || '').trim();
+  if (!note || !id) throw new Error('La reversión requiere un motivo y un identificador.');
+  return { id, batchId: batch.id, date: Date.now(), reason: note, type: 'production-batch-reversal' };
 }
 
 export function getJobSoldQuantity(jobId, sales) {
