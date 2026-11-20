@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState, applyProductionBatchMaterials, reverseProductionBatchMaterials } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, assertProductionBatchCanReverse, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -430,18 +430,10 @@ function attachProducts(root) {
       const batch=job?.data?.productionBatches?.find(item=>item.id===reverseButton.dataset.batchId);
       if(!job||!batch){alert('No se encontró el trabajo o lote.');return;}
       if(batch.status==='reversed'){alert('Este lote ya está revertido.');return;}
-      const quantity=Number(batch.sellableQuantity||0);
-      if(!Number.isSafeInteger(quantity)||quantity<=0){alert('La cantidad vendible del lote no es válida; requiere revisión manual.');return;}
-      const soldForJob=appState.sales.filter(sale=>sale.jobId===job.id).reduce((sum,sale)=>sum+Number(sale.cantidad||1),0);
-      const jobAvailable=Math.max(0,getJobSellableQuantity(job)-soldForJob);
-      if(quantity>jobAvailable){alert('No se puede revertir: el trabajo no tiene suficientes unidades disponibles sin comprometer ventas. Disponibles: '+jobAvailable+'.');return;}
-      if(job.data.productoId&&job.data.variantId){
-        const variantStock=getProductVariantStock(job.data.productoId,job.data.variantId,appState.jobs,appState.sales,appState.consignments);
-        if(quantity>variantStock.available){alert('No se puede revertir: la variante tiene unidades vendidas o consignadas. Disponibles: '+variantStock.available+'.');return;}
-      }else if(job.data.productoId){
-        const productStock=getProductStock(job.data.productoId,appState.jobs,appState.sales,appState.consignments);
-        if(quantity>productStock.available){alert('No se puede revertir: el producto tiene unidades vendidas o consignadas. Disponibles: '+productStock.available+'.');return;}
-      }
+      let quantity;
+      try{
+        ({quantity}=assertProductionBatchCanReverse(job,batch,appState.jobs,appState.sales,appState.consignments));
+      }catch(error){alert('No se puede revertir: '+error.message);return;}
       const reason=prompt('Motivo de la reversión del lote:');
       if(reason===null)return;
       const reversalId=makeId('reversion-lote');
