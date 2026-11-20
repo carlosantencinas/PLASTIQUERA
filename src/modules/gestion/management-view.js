@@ -145,7 +145,7 @@ function products() {
   return `<div class="management-card product-sale-stock">
     <h3>Productos disponibles para vender</h3>
     <p class="management-help">Aquí aparecen los artículos terminados que tienen unidades disponibles. El stock se calcula con los trabajos asignados, las ventas y las entregas en consignación.</p>
-    <p class="management-help"><b>Importante:</b> las variantes y sus etiquetas ya pueden registrarse, pero el stock, las ventas y las consignaciones todavía se controlan a nivel del producto padre. No uses las variantes para separar existencias por color hasta completar esa integración.</p>
+    <p class="management-help"><b>Control por variante:</b> cada variante mantiene sus propias existencias. Las piezas se suman desde los trabajos asignados a esa variante y se descuentan las ventas y consignaciones correspondientes. Los movimientos históricos sin variante permanecen sin clasificar y no se reparten automáticamente.</p>
     <div id="sellable-products-table" class="management-table-wrap"></div>
   </div>
   <div class="management-card production-control-card">
