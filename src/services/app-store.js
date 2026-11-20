@@ -116,26 +116,50 @@ export function importBackup(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async () => {
+      const previous = JSON.parse(JSON.stringify({
+        jobs: appState.jobs, products: appState.products, clients: appState.clients,
+        sales: appState.sales, consignments: appState.consignments, expenses: appState.expenses,
+        settings: appState.settings, materials: inventoryState.materials,
+        purchases: inventoryState.purchases, jobMovements: inventoryState.jobMovements,
+      }));
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
-        const arrays = ['jobs','products','productos','clients','clientes','sales','consignments','consignaciones','expenses','materials','purchases','jobMovements'];
-        if (!arrays.some(key => Array.isArray(data[key]))) throw new Error('No se encontraron datos de Plastiquería en el archivo.');
-        appState.jobs.splice(0, appState.jobs.length, ...(Array.isArray(data.jobs) ? data.jobs : []));
-        appState.products = Array.isArray(data.products) ? data.products : (data.productos || []);
-        appState.clients = Array.isArray(data.clients) ? data.clients : (data.clientes || []);
-        appState.sales = Array.isArray(data.sales) ? data.sales : [];
-        appState.consignments = Array.isArray(data.consignments) ? data.consignments : (data.consignaciones || []);
-        appState.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+        const products = Array.isArray(data.products) ? data.products : data.productos;
+        const clients = Array.isArray(data.clients) ? data.clients : data.clientes;
+        const consignments = Array.isArray(data.consignments) ? data.consignments : data.consignaciones;
+        const required = {
+          jobs: data.jobs, products, clients, sales: data.sales,
+          consignments, expenses: data.expenses, materials: data.materials,
+          purchases: data.purchases, jobMovements: data.jobMovements,
+        };
+        const missing = Object.entries(required).filter(([, value]) => !Array.isArray(value)).map(([key]) => key);
+        if (missing.length) throw new Error('Respaldo incompleto. Faltan listas obligatorias: ' + missing.join(', ') + '. No se modificó la información actual.');
+        appState.jobs.splice(0, appState.jobs.length, ...data.jobs);
+        appState.products = products;
+        appState.clients = clients;
+        appState.sales = data.sales;
+        appState.consignments = consignments;
+        appState.expenses = data.expenses;
         appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
-        loadInventorySnapshot({ materials: data.materials || [], purchases: data.purchases || [], jobMovements: data.jobMovements || [] });
+        loadInventorySnapshot({ materials: data.materials, purchases: data.purchases, jobMovements: data.jobMovements });
         normalizeConsignments();
         linkClientRecords();
         restoreLegacyJobMovements();
         const persisted = await saveAppState();
-        if (!persisted) throw new Error('Firestore no confirmó la importación del respaldo. Conserva esta sesión y revisa la conexión antes de continuar.');
+        if (!persisted) throw new Error('Firestore no confirmó la importación. Se restauró el estado anterior en pantalla; conserva esta sesión y revisa la conexión.');
         resolve(true);
-      } catch (error) { reject(error); }
+      } catch (error) {
+        appState.jobs.splice(0, appState.jobs.length, ...previous.jobs);
+        appState.products = previous.products;
+        appState.clients = previous.clients;
+        appState.sales = previous.sales;
+        appState.consignments = previous.consignments;
+        appState.expenses = previous.expenses;
+        appState.settings = previous.settings;
+        loadInventorySnapshot({ materials: previous.materials, purchases: previous.purchases, jobMovements: previous.jobMovements });
+        reject(error);
+      }
     };
     reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
     reader.readAsText(file);
