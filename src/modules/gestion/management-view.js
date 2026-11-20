@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
-import { inventoryState } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock } from '../../calculations/commerce.js';
+import { inventoryState, applyProductionBatchMaterials } from '../../services/inventory-store.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, createProductionBatch } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -293,6 +293,8 @@ function renderCompletedJobs(root) {
           </div>
         </details>
         ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
+        <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
+        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<small>'+job.data.productionBatches.length+' lote(s) adicional(es)</small>' : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -422,6 +424,39 @@ function attachProducts(root) {
     }
   });
   root.querySelector('#completed-jobs-table').addEventListener('click',e=>{
+    const batchButton=e.target.closest('[data-production-batch]');
+    if(batchButton){
+      const job=getJob(batchButton.dataset.productionBatch);
+      if(!job?.data){alert('No se encontró el trabajo.');return;}
+      const produced=Number(prompt('¿Cuántas piezas se produjeron en esta reimpresión?', '1'));
+      if(!Number.isSafeInteger(produced)||produced<=0){alert('La cantidad producida debe ser un entero mayor que cero.');return;}
+      const failed=Number(prompt('¿Cuántas piezas fallaron?', '0'));
+      if(!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('La cantidad fallida debe ser un entero entre cero y lo producido.');return;}
+      const consumptions=[];
+      const materials=inventoryState.materials.filter(m=>m.unidad==='g'&&Number(m.stock)>0);
+      if(materials.length){
+        const choice=prompt('Materiales disponibles (escribe el ID exacto):\\n'+materials.map(m=>m.id+' — '+m.nombre+' ('+Number(m.stock).toFixed(1)+' g)').join('\\n')+'\\n\\nDeja vacío si no deseas registrar consumo de material.');
+        if(choice===null)return;
+        if(choice.trim()){
+          const material=materials.find(m=>m.id===choice.trim());
+          if(!material){alert('No se encontró ese ID de material.');return;}
+          const grams=Number(prompt('Gramos consumidos de '+material.nombre+':','0'));
+          if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
+          consumptions.push({materialId:material.id,grams});
+        }
+      }
+      try{
+        if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
+        const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions},job.data.productionBatches);
+        applyProductionBatchMaterials(job,batch);
+        job.data.productionBatches.push(batch);
+        job.updatedAt=Date.now();
+        saveAppState();
+        renderManagementView(root,'products');
+        notify('Reimpresión registrada: '+batch.sellableQuantity+' piezas vendibles.');
+      }catch(error){alert(error.message);}
+      return;
+    }
     const sellJob=e.target.closest('[data-sell-job]');
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
