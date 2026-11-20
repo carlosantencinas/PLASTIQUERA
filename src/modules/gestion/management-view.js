@@ -294,7 +294,7 @@ function renderCompletedJobs(root) {
         </details>
         ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
         <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
-        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<small>'+job.data.productionBatches.length+' lote(s) adicional(es)</small>' : ''}
+        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small></li>';}).join('')+'</ul></details>' : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
