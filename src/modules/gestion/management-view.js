@@ -430,20 +430,19 @@ function attachProducts(root) {
       if(!job?.data){alert('No se encontró el trabajo.');return;}
       const produced=Number(prompt('¿Cuántas piezas se produjeron en esta reimpresión?', '1'));
       if(!Number.isSafeInteger(produced)||produced<=0){alert('La cantidad producida debe ser un entero mayor que cero.');return;}
-      const failed=Number(prompt('¿Cuántas piezas fallaron?', '0'));
+      const failedInput=prompt('¿Cuántas piezas fallaron?', '0');
+      if(failedInput===null)return;
+      const failed=Number(failedInput);
       if(!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('La cantidad fallida debe ser un entero entre cero y lo producido.');return;}
       const consumptions=[];
       const materials=inventoryState.materials.filter(m=>m.unidad==='g'&&Number(m.stock)>0);
-      if(materials.length){
-        const choice=prompt('Materiales disponibles (escribe el ID exacto):\\n'+materials.map(m=>m.id+' — '+m.nombre+' ('+Number(m.stock).toFixed(1)+' g)').join('\\n')+'\\n\\nDeja vacío si no deseas registrar consumo de material.');
-        if(choice===null)return;
-        if(choice.trim()){
-          const material=materials.find(m=>m.id===choice.trim());
-          if(!material){alert('No se encontró ese ID de material.');return;}
-          const grams=Number(prompt('Gramos consumidos de '+material.nombre+':','0'));
-          if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
-          consumptions.push({materialId:material.id,grams});
-        }
+      for(const material of materials){
+        const gramsInput=prompt('Gramos consumidos de '+material.nombre+' (stock: '+Number(material.stock).toFixed(1)+' g). Deja vacío si no se utilizó:','');
+        if(gramsInput===null)return;
+        if(!gramsInput.trim())continue;
+        const grams=Number(gramsInput);
+        if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
+        consumptions.push({materialId:material.id,grams});
       }
       try{
         if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
