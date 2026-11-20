@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove } from '../../calculations/commerce.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -315,7 +315,7 @@ function renderProductsTable(root) {
   root.innerHTML = `<table class="management-table"><thead><tr><th>Código</th><th>Tipo</th><th>Producto</th><th>Variantes / etiquetas</th><th>Trabajos</th><th>Vendibles</th><th>Vendidas</th><th>En tienda</th><th>Disponibles</th><th></th></tr></thead><tbody>${appState.products.map(p=>{
     const jobs=jobIdsFor(p.id), stock=stockFor(p.id), total=stock.produced, sold=stock.sold, cons=stock.consigned, avail=stock.available;
     const variants=getProductVariants(p);
-    const variantRows=variants.map(v=>`<div class="product-variant-row"><span><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code></span><button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`).join('');
+    const variantRows=variants.map(v=>{const vs=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="product-variant-row"><span><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code><small>Producidas: ${vs.produced} · Vendidas: ${vs.sold} · En tienda: ${vs.consigned} · Disponibles: <b>${vs.available}</b></small></span><button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('');
     return `<tr><td>${esc(p.codigo)}</td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1] || p.tipo || 'Sin clasificar')}</td><td><b>${esc(p.nombre)}</b><small>${esc(p.notas)}</small><button type="button" class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta padre</button></td><td>${variantRows || '<small>Sin variantes</small>'}<button type="button" class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></td><td>${jobs.length}</td><td>${total}</td><td>${sold}</td><td>${cons}</td><td><b>${avail}</b></td><td><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
