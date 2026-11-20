@@ -1,4 +1,5 @@
 import { inventoryState, loadInventorySnapshot } from './inventory-store.js';
+import { validateBackupData } from './backup-validation.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({ precioKwh: 0.70, potenciaW: 1450, mantenimientoHora: 1.50, tarifaHora: 20, horasTrabajo: 0.5, fallas: 10, margen: 40, precioFilamentoKg: 95 });
 export const appState = { jobs: [], products: [], clients: [], sales: [], consignments: [], expenses: [], settings: { ...DEFAULT_SETTINGS } };
@@ -125,24 +126,16 @@ export function importBackup(file) {
       try {
         const data = JSON.parse(String(reader.result || '{}'));
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('El archivo no contiene un respaldo válido.');
-        const products = Array.isArray(data.products) ? data.products : data.productos;
-        const clients = Array.isArray(data.clients) ? data.clients : data.clientes;
-        const consignments = Array.isArray(data.consignments) ? data.consignments : data.consignaciones;
-        const required = {
-          jobs: data.jobs, products, clients, sales: data.sales,
-          consignments, expenses: data.expenses, materials: data.materials,
-          purchases: data.purchases, jobMovements: data.jobMovements,
-        };
-        const missing = Object.entries(required).filter(([, value]) => !Array.isArray(value)).map(([key]) => key);
-        if (missing.length) throw new Error('Respaldo incompleto. Faltan listas obligatorias: ' + missing.join(', ') + '. No se modificó la información actual.');
-        appState.jobs.splice(0, appState.jobs.length, ...data.jobs);
+        const validated = validateBackupData(data);
+        const { jobs, products, clients, sales, consignments, expenses, materials, purchases, jobMovements } = validated;
+        appState.jobs.splice(0, appState.jobs.length, ...jobs);
         appState.products = products;
         appState.clients = clients;
-        appState.sales = data.sales;
+        appState.sales = sales;
         appState.consignments = consignments;
-        appState.expenses = data.expenses;
+        appState.expenses = expenses;
         appState.settings = { ...DEFAULT_SETTINGS, ...(data.settings && typeof data.settings === 'object' ? data.settings : {}) };
-        loadInventorySnapshot({ materials: data.materials, purchases: data.purchases, jobMovements: data.jobMovements });
+        loadInventorySnapshot({ materials, purchases, jobMovements });
         normalizeConsignments();
         linkClientRecords();
         restoreLegacyJobMovements();
