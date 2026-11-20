@@ -513,8 +513,10 @@ function attachSales(root) {
     const job=getJob(d.jobId);if(job){try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}}
     const product=getProduct(d.productoId);
     if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
-    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
+    const variantId=String(d.variantId||'');
+    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
+    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
+    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
     appState.sales.push(sale);pendingSaleProductId=null;pendingSaleJobId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
   });
   if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
@@ -546,9 +548,11 @@ function attachConsignments(root) {
     try{qty=positiveInteger(d.cantidad);}catch(error){alert(error.message);return;}
     const price=Number(d.precioUnitario),paid=Number(d.montoPagado);
     if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
-    if(product){try{assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
+    const variantId=String(d.variantId||'');
+    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para consignar.');return;}
+    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
     const consignmentDate=d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now();
-    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
+    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,variantId:variantId||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
   });
   root.querySelector('#consignments-table').addEventListener('click',e=>{
