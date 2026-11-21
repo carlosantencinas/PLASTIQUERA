@@ -694,7 +694,7 @@ function attachSales(root) {
     root.querySelector('#sale-stock-help').textContent=`Piezas vendibles del trabajo: ${pieces(job)}. Ventas ya registradas: ${appState.sales.filter(s=>s.jobId===job.id).reduce((n,s)=>n+Number(s.cantidad||1),0)}.`;
   }
   jobSel.addEventListener('change',updatePrice);form.elements.cantidad.addEventListener('input',updatePrice);
-  form.addEventListener('submit',e=>{
+  form.addEventListener('submit',async e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const qty=Math.floor(Number(d.cantidad)), amount=Number(d.monto);
     if(!Number.isInteger(qty)||qty<1||!Number.isFinite(amount)||amount<=0){alert('Cantidad o monto no válido.');return;}
     const job=getJob(d.jobId);
