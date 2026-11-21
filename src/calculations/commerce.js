@@ -4,22 +4,23 @@ export function positiveInteger(value, label = 'La cantidad') {
   return number;
 }
 
-export function getJobSellableQuantity(job) {
+export function getJobBaseSellableQuantity(job) {
   const data = job?.data || {};
   const explicit = data.piezasVendibles;
   const original = explicit !== undefined && explicit !== null
     ? Number(explicit)
     : Number(data.piezas ?? 1) - Number(data.piezasFallidas ?? 0);
-  const base = Number.isFinite(original) ? Math.max(0, original) : 0;
-  // Cada reimpresión es un lote adicional; las anulaciones se registran
-  // como eventos de reversión y nunca borran el lote original.
-  const batches = Array.isArray(data.productionBatches) ? data.productionBatches : [];
+  return Number.isFinite(original) ? Math.max(0, original) : 0;
+}
+
+export function getJobSellableQuantity(job) {
+  const batches = Array.isArray(job?.data?.productionBatches) ? job.data.productionBatches : [];
   const additional = batches.reduce((sum, batch) => {
     if (batch.status === 'reversed') return sum;
     const quantity = Number(batch.sellableQuantity);
     return sum + (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 0);
   }, 0);
-  return base + additional;
+  return getJobBaseSellableQuantity(job) + additional;
 }
 
 export function createProductionBatch(job, input, existingBatches = []) {
@@ -109,10 +110,14 @@ export function consignmentBalance(item) {
  */
 export function getProductVariantStock(productId, variantId, jobs, sales, consignments) {
   if (!productId || !variantId) throw new Error('Selecciona un producto y una variante válidos.');
-  const variantJobs = jobs.filter(job =>
-    job.data?.productoId === productId && job.data?.variantId === variantId
-  );
-  const produced = variantJobs.reduce((sum, job) => sum + getJobSellableQuantity(job), 0);
+  const variantJobs = jobs.filter(job => job.data?.productoId === productId);
+  const produced = variantJobs.reduce((sum, job) => {
+    const base = job.data?.variantId === variantId ? getJobBaseSellableQuantity(job) : 0;
+    const batches = (Array.isArray(job.data?.productionBatches) ? job.data.productionBatches : [])
+      .filter(batch => batch.status !== 'reversed' && (batch.variantId || job.data?.variantId || null) === variantId)
+      .reduce((total, batch) => total + Math.max(0, Number(batch.sellableQuantity) || 0), 0);
+    return sum + base + batches;
+  }, 0);
   const jobById = new Map(jobs.map(job => [job.id, job]));
   const saleBelongsToVariant = sale => {
     if (sale.productoId && sale.productoId !== productId) return false;
@@ -158,8 +163,8 @@ export function assertProductionBatchCanReverse(job, batch, jobs, sales, consign
     throw new Error('El trabajo no tiene suficientes unidades disponibles sin comprometer ventas. Disponibles: ' + jobAvailable + '.');
   }
   let productAvailable = null;
-  if (job.data?.productoId && job.data?.variantId) {
-    productAvailable = getProductVariantStock(job.data.productoId, job.data.variantId, jobs, sales, consignments).available;
+  if (job.data?.productoId && (batch.variantId || job.data?.variantId)) {
+    productAvailable = getProductVariantStock(job.data.productoId, batch.variantId || job.data.variantId, jobs, sales, consignments).available;
   } else if (job.data?.productoId) {
     productAvailable = getProductStock(job.data.productoId, jobs, sales, consignments).available;
   }
