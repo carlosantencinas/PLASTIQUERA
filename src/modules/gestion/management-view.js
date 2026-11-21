@@ -48,8 +48,8 @@ async function requestProductionBatchOptions(job, consumptions) {
     dialog.addEventListener('close',()=>finish(null));
     dialog.addEventListener('submit',event=>{
       event.preventDefault();
-      const produced=quantityToggle.checked?Number(dialog.elements.produced.value):1;
-      const failed=quantityToggle.checked?Number(dialog.elements.failed.value):0;
+      const produced=quantityToggle.checked?Number(dialog.querySelector('[name="produced"]').value):1;
+      const failed=quantityToggle.checked?Number(dialog.querySelector('[name="failed"]').value):0;
       if(!Number.isSafeInteger(produced)||produced<=0||!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('Revisa las cantidades: las piezas fallidas deben estar entre cero y las producidas.');return;}
       const revised=consumptions.map((row,index)=>{
         const check=dialog.querySelector('[data-change-material="'+index+'"]');
