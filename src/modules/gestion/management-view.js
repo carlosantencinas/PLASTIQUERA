@@ -206,22 +206,31 @@ function dashboard() {
 }
 
 function products() {
-  return `<div class="management-grid product-catalog-layout">
-    <form class="management-card" id="product-form"><h3 id="product-form-title">Nuevo producto</h3>
-      <input type="hidden" name="id">
-      <label class="management-field">Tipo de producto<select name="tipo">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label} (${code})</option>`).join('')}</select></label>
-      <label class="management-field">Código único<input name="codigo" required placeholder="AM3D-ACC-0001"></label>
-      <label class="management-field">Nombre<input name="nombre" required placeholder="Nombre del producto"></label>
-      <label class="management-field">Notas<textarea name="notas" rows="3" placeholder="Descripción general del modelo"></textarea></label>
-      <div class="management-actions"><button class="management-button" type="submit">Guardar producto</button><button class="management-button secondary" type="reset" id="product-reset">Limpiar</button></div>
-    </form>
-    <div class="management-card product-catalog-card"><div class="dashboard-section-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Productos y variantes</h3></div><span>${appState.products.length} productos</span></div>
-      <p class="management-help">Una sola ficha por modelo. Despliega cada producto para consultar colores, códigos individuales y existencias por variante.</p>
-      <div class="management-table-wrap" id="products-table"></div>
-    </div>
+  return `<div class="product-workspace">
+    <details class="management-card product-editor" id="product-editor">
+      <summary><span><b id="product-form-title">Nuevo producto</b><small>Crear o editar una ficha del catálogo</small></span><span class="product-editor-plus">+</span></summary>
+      <form id="product-form">
+        <input type="hidden" name="id">
+        <label class="management-field">Tipo de producto<select name="tipo">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label} (${code})</option>`).join('')}</select></label>
+        <label class="management-field">Código único<input name="codigo" required placeholder="AM3D-ACC-0001"></label>
+        <label class="management-field">Nombre<input name="nombre" required placeholder="Nombre del producto"></label>
+        <label class="management-field">Notas<textarea name="notas" rows="2" placeholder="Descripción general del modelo"></textarea></label>
+        <div class="management-actions"><button class="management-button" type="submit">Guardar producto</button><button class="management-button secondary" type="reset" id="product-reset">Limpiar</button></div>
+      </form>
+    </details>
+    <section class="management-card product-catalog-card">
+      <div class="product-catalog-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Productos</h3><p>Una ficha por modelo; variantes, existencias y etiquetas dentro de cada producto.</p></div><span class="product-count">${appState.products.length} modelos</span></div>
+      <div class="management-search-wrap"><input class="management-search" id="product-search" type="search" placeholder="Buscar por código, nombre o variante…"></div>
+      <div id="products-table" class="product-card-list"></div>
+    </section>
   </div>
-  <details class="management-card product-secondary-section"><summary>Trabajos realizados y reimpresiones</summary><p class="management-help">Asigna aquí trabajos existentes a un producto o crea un código para trabajos aún no clasificados.</p><div id="completed-jobs-table" class="management-table-wrap"></div></details>
-  <details class="management-card product-secondary-section"><summary>Asignación general de trabajos</summary><div id="product-assignments"></div></details>`;
+  <details class="management-card product-secondary-section">
+    <summary><span>Trabajos y asignaciones</span><small>Vincular trabajos, registrar reimpresiones y revisar producción</small></summary>
+    <div class="product-operations-grid">
+      <section><h4>Trabajos realizados y reimpresiones</h4><div id="completed-jobs-table" class="management-table-wrap"></div></section>
+      <section><h4>Asignación general de trabajos</h4><div id="product-assignments"></div></section>
+    </div>
+  </details>`;
 }
 function clients() {
   return `<div class="management-grid">
@@ -367,17 +376,39 @@ function printProductBarcode(product, variant = null) {
   catch (error) { popup.close(); alert('No se pudo generar el código de barras: ' + error.message); return; }
   popup.focus(); popup.setTimeout(() => popup.print(), 300);
 }
-function renderProductsTable(root) {
-  if (!appState.products.length) { root.innerHTML='<p class="management-empty">Todavía no hay productos. Crea el primero para comenzar.</p>'; return; }
-  root.innerHTML = `<table class="management-table product-catalog-table"><thead><tr><th>Producto</th><th>Tipo</th><th>Existencias</th><th>Variantes</th><th>Acciones</th></tr></thead><tbody>${appState.products.map(p=>{
-    const stock=stockFor(p.id),variants=getProductVariants(p);
+function renderProductsTable(root, query='') {
+  const q=String(query||'').trim().toLocaleLowerCase('es');
+  const products=appState.products.filter(p=>{
+    const variants=getProductVariants(p);
+    return [p.nombre,p.codigo,p.tipo,p.notas,...variants.flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q);
+  });
+  if (!products.length) {
+    root.innerHTML=appState.products.length?'<p class="management-empty">No hay productos que coincidan con la búsqueda.</p>':'<p class="management-empty">Todavía no hay productos. Pulsa “Nuevo producto” para crear el primero.</p>';
+    return;
+  }
+  root.innerHTML=products.map(p=>{
+    const stock=stockFor(p.id), variants=getProductVariants(p);
     const variantRows=variants.map(v=>{
       const vs=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);
       const materialNames=(v.materialIds||[]).map(id=>inventoryState.materials.find(item=>item.id===id)?.nombre).filter(Boolean).join(' + ');
-      return `<div class="product-variant-row"><span><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code><small>${materialNames?esc(materialNames)+' · ':''}${vs.available} disponibles · ${vs.produced} producidas · ${vs.sold} vendidas · ${vs.consigned} en tienda</small></span><button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;
+      return `<div class="product-variant-row">
+        <span class="product-variant-swatch" aria-hidden="true"></span>
+        <span class="product-variant-info"><b>${esc(v.nombre)}</b><code>${esc(v.codigo)}</code><small>${materialNames?esc(materialNames)+' · ':''}${vs.available} disponibles <i>·</i> ${vs.produced} producidas <i>·</i> ${vs.sold} vendidas <i>·</i> ${vs.consigned} en tienda</small></span>
+        <button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button>
+      </div>`;
     }).join('');
-    return `<tr><td><b>${esc(p.nombre)}</b><small>${esc(p.codigo)} · ${esc(p.notas||'')}</small></td><td>${esc(PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1]||p.tipo||'Sin clasificar')}</td><td><b>${stock.available}</b><small>de ${stock.produced} producidas</small></td><td><details class="product-variant-details"><summary>${variants.length} variantes</summary>${variantRows||'<small>Sin variantes registradas</small>'}<button type="button" class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details></td><td><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button> <button class="management-link" data-product-edit="${esc(p.id)}">Editar</button> <button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></td></tr>`;
-  }).join('')}</tbody></table>`;
+    const type=PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1]||p.tipo||'Sin clasificar';
+    return `<article class="product-catalog-item" data-product-card>
+      <div class="product-card-main">
+        <div class="product-card-identity"><span class="product-type-label">${esc(type)}</span><h4>${esc(p.nombre)}</h4><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div>
+        <div class="product-stock-summary"><b>${stock.available}</b><span>disponibles</span><small>${stock.produced} producidas</small></div>
+      </div>
+      <div class="product-card-footer">
+        <details class="product-variant-details"><summary>Variantes <b>${variants.length}</b></summary><div class="product-variant-list">${variantRows||'<p class="management-empty">Aún no hay variantes individuales.</p>'}</div><button type="button" class="management-link product-add-variant" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details>
+        <div class="product-card-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta general</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
+      </div>
+    </article>`;
+  }).join('');
 }
 function renderAssignments(root) {
   if (!appState.jobs.length) { root.innerHTML='<p class="management-empty">Registra primero un trabajo para poder asignarlo.</p>'; return; }
@@ -437,6 +468,7 @@ function attachProducts(root) {
     else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
+  root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
     const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
@@ -454,7 +486,7 @@ function attachProducts(root) {
       }catch(error){alert(error.message);}
       return;
     }
-    if(edit){const p=getProduct(edit.dataset.productEdit);form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
+    if(edit){const p=getProduct(edit.dataset.productEdit);root.querySelector('#product-editor').open=true;form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
     if(del){const id=del.dataset.productDelete;
       const hasSales=appState.sales.some(s=>s.productoId===id);
       const hasConsignments=appState.consignments.some(c=>c.productoId===id);
