@@ -36,7 +36,7 @@ async function requestProductionBatchOptions(job, consumptions) {
     </form>`;
     const quantityToggle=dialog.querySelector('#batch-quantity-change');
     const materialToggle=dialog.querySelector('#batch-material-change');
-    quantityToggle.addEventListener('change',()=>{dialog.querySelector('.batch-quantity-fields').hidden=!quantityToggle.checked;});
+    quantityToggle.addEventListener('change',()=>{dialog.querySelector('.batch-quantity-fields').hidden=!quantityToggle.checked;dialog.querySelectorAll('.batch-quantity-fields input').forEach(input=>input.disabled=!quantityToggle.checked);});
     materialToggle.addEventListener('change',()=>{dialog.querySelector('.batch-material-fields').hidden=!materialToggle.checked;});
     dialog.querySelectorAll('[data-change-material]').forEach(check=>{
       check.addEventListener('change',()=>{dialog.querySelector('[data-material-choice="'+check.dataset.changeMaterial+'"]').disabled=!check.checked;});
@@ -529,7 +529,7 @@ function attachProducts(root) {
         if(!batchOptions)return;
         produced=batchOptions.produced;
         failed=batchOptions.failed;
-        consumptions=batchOptions.consumptions;
+        consumptions=batchOptions.consumptions.map(row=>({...row,grams:Number((row.grams*produced).toFixed(3))}));
         const combined=new Map();
         for(const row of consumptions) combined.set(row.materialId,(combined.get(row.materialId)||0)+row.grams);
         const insufficient=[...combined].map(([id,grams])=>({grams,material:inventoryState.materials.find(item=>item.id===id)}))
@@ -538,6 +538,7 @@ function attachProducts(root) {
         consumptions=[...combined].map(([materialId,grams])=>({materialId,grams}));
       } catch(error) { alert(error.message); return; }
       const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousProducts=JSON.parse(JSON.stringify(appState.products));
       const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
       const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
       batchButton.disabled=true;
@@ -556,6 +557,7 @@ function attachProducts(root) {
         notify('Reimpresión registrada y guardada: '+batch.sellableQuantity+' piezas vendibles.');
       }catch(error){
         job.data=previousJobData;
+        appState.products.splice(0,appState.products.length,...previousProducts);
         inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
         inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
         alert('No se pudo registrar la reimpresión: '+error.message);
