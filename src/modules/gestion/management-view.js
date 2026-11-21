@@ -1,7 +1,7 @@
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SETTINGS } from '../../services/app-store.js';
 import { inventoryState, applyProductionBatchMaterials, reverseProductionBatchMaterials } from '../../services/inventory-store.js';
-import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, assertProductionBatchCanReverse, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
+import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertJobVariantCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, assertProductionBatchCanReverse, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
 import { getProductionBatchMaterialConsumptions } from '../../calculations/production-consumption.js';
 
@@ -622,17 +622,29 @@ function attachProducts(root) {
       const productId=String(select?.value||'');
       const product=appState.products.find(item=>item.id===productId);
       if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
-      job.data.productoId=product.id;
       const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');
       const variantId=String(variantSelect?.value||'');
       if(variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante no pertenece al producto seleccionado.');return;}
-      job.data.variantId=variantId||null;
-      saveAppState();
-      // Actualiza los dos listados desde el mismo estado en memoria inmediatamente.
-      renderCompletedJobs(root.querySelector('#completed-jobs-table'));
-      renderProductsTable(root.querySelector('#products-table'));
-      renderAssignments(root.querySelector('#product-assignments'));
-      notify('Trabajo asignado a '+product.codigo+'. Ya figura en productos disponibles si tiene unidades vendibles.');
+      const previousProductId=job.data.productoId??null;
+      const previousVariantId=job.data.variantId??null;
+      assign.disabled=true;
+      try{
+        job.data.productoId=product.id;
+        job.data.variantId=variantId||null;
+        job.updatedAt=Date.now();
+        const persisted=await saveAppState();
+        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+        renderCompletedJobs(root.querySelector('#completed-jobs-table'));
+        renderProductsTable(root.querySelector('#products-table'));
+        renderAssignments(root.querySelector('#product-assignments'));
+        notify('Trabajo asignado y guardado en Firebase.');
+      }catch(error){
+        job.data.productoId=previousProductId;
+        job.data.variantId=previousVariantId;
+        alert('No se pudo guardar la asignación: '+error.message);
+        renderCompletedJobs(root.querySelector('#completed-jobs-table'));
+        renderProductsTable(root.querySelector('#products-table'));
+      }
     }
     if(create){
       const job=getJob(create.dataset.createAssign);
@@ -685,15 +697,34 @@ function attachSales(root) {
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const qty=Math.floor(Number(d.cantidad)), amount=Number(d.monto);
     if(!Number.isInteger(qty)||qty<1||!Number.isFinite(amount)||amount<=0){alert('Cantidad o monto no válido.');return;}
-    const job=getJob(d.jobId);if(job){try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}}
+    const job=getJob(d.jobId);
     const product=getProduct(d.productoId);
-    if(job && product && job.data.productoId!==product.id){alert('El trabajo no está asignado a ese producto. Asigna primero el trabajo desde Productos o registra la venta sin seleccionar producto.');return;}
-    // La variante elegida puede ser distinta a la del trabajo cuando la pieza procede de un lote de reimpresión.
+    if(job){
+      try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}
+      if(!product||job.data.productoId!==product.id){alert('El trabajo seleccionado debe estar asignado al producto elegido.');return;}
+    }
     const variantId=String(d.variantId||'');
     if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
-    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    const linkedClient=findClientByName(d.cliente);const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
-    appState.sales.push(sale);pendingSaleProductId=null;pendingSaleJobId=null;saveAppState();renderManagementView(root,'sales');notify('Venta registrada.');
+    if(product&&variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante seleccionada no pertenece al producto.');return;}
+    if(job&&variantId){
+      try{assertJobVariantCanSell(job,variantId,qty,appState.sales);}catch(error){alert(error.message);return;}
+    } else if(job&&!variantId&&job.data?.variantId){
+      alert('Este trabajo está clasificado en una variante. Selecciona esa variante para registrar la venta.');return;
+    } else if(product){
+      try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}
+    }
+    const linkedClient=findClientByName(d.cliente);
+    const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
+    appState.sales.push(sale);
+    try{
+      const persisted=await saveAppState();
+      if(!persisted)throw new Error('Firestore no confirmó el registro.');
+      pendingSaleProductId=null;pendingSaleJobId=null;
+      renderManagementView(root,'sales');notify('Venta registrada y guardada en Firebase.');
+    }catch(error){
+      appState.sales=appState.sales.filter(item=>item.id!==sale.id);
+      alert('No se pudo guardar la venta: '+error.message);
+    }
   });
   if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
     const job=getJob(pendingSaleJobId);
