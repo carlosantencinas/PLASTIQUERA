@@ -1,45 +1,59 @@
-# Agencia de Modelos 3D (AM3D)
+# Plastiquería — AM3D
 
-Aplicación web para administrar un taller de impresión 3D. Es un repositorio independiente: **3DBoys permanece intacto**.
+Aplicación web para administrar un taller de impresión 3D. Este repositorio es independiente: el proyecto original `3DBoys` permanece intacto.
+
+Aplicación publicada: https://carlosantencinas.github.io/PLASTIQUERA/
 
 ## Módulos
 
-- **Panel principal:** resumen de trabajos, productos, ventas y cuentas pendientes de consignación.
-- **Trabajos:** registro, edición, costos de material/energía/mantenimiento/mano de obra, fallas, margen, piezas vendibles y consumo de inventario.
-- **Inventario y compras:** filamentos, resinas, insumos y equipos; conversión de unidades; costo promedio ponderado; ajustes; historial y consumo por trabajo.
-- **Productos:** catálogo, códigos, asignación de trabajos y stock calculado.
+- **Panel principal:** resumen de trabajos, productos, ventas y cuentas pendientes.
+- **Trabajos:** registro, edición, costos de material, energía, mantenimiento y mano de obra; fallas, margen, piezas vendibles y consumo de inventario.
+- **Inventario y compras:** filamentos, resinas, insumos y equipos; conversión de unidades, costo promedio ponderado, ajustes e historial de consumo por trabajo.
+- **Productos:** catálogo, códigos, variantes, asignación de trabajos y stock calculado.
 - **Clientes:** directorio de clientes y tiendas.
 - **Ventas:** registro, control de cantidades, historial, CSV e impresión.
-- **Consignaciones:** entregas, pagos acumulados/parciales, devoluciones, saldos pendientes y saldos a favor.
-- **Respaldo:** exportación e importación de datos JSON.
+- **Consignaciones:** entregas, pagos acumulados o parciales, devoluciones y saldos.
+- **Respaldo:** exportación e importación de datos JSON con validación previa.
 
-## Persistencia local
+## Persistencia y sincronización
 
-Sin configuración de Firebase, los datos se guardan en el navegador mediante localStorage. No se comparten entre dispositivos ni usuarios. Exporta respaldos periódicos y guárdalos fuera del equipo.
+La persistencia de la aplicación es **exclusivamente Firebase Firestore**. No utiliza `localStorage` ni IndexedDB como almacenamiento de datos del negocio. El estado se mantiene en memoria durante la sesión y se carga desde Firestore al autenticar.
 
-La importación reemplaza los datos locales actuales. Antes de importar, descarga un respaldo del estado vigente. El importador admite los nombres de campos usados por el documento de 3DBoys (productos, clientes y consignaciones).
+El documento compartido configurado por la aplicación es:
 
-## Firebase Authentication y Firestore
+- Colección: `plastiqueria`
+- Documento: `principal`
 
-La aplicación incorpora acceso por correo/contraseña (sin registro público) y sincronización opcional con el documento compartido `talleres3dboys/principal`.
+La sincronización utiliza transacciones y un campo de revisión (`_revision`). Si detecta una modificación externa desde otra sesión, bloquea el guardado para evitar sobrescribir cambios. La confirmación de guardado se emite después de que Firestore confirma la escritura.
 
-Se conservan los campos legados `jobs`, `materials`, `purchases`, `sales`, `productos`, `clientes` y `consignaciones`. Agencia de Modelos 3D añade `jobMovements` para registrar consumos de material por trabajo. Al importar datos antiguos, reconstruye los movimientos históricos a partir de los trabajos y materiales para evitar volver a descontar el mismo consumo al editarlos.
+La caché de interfaz de la PWA no sustituye a Firestore. Para consultar o modificar datos se requiere conexión a internet y una sesión autenticada.
 
-La sincronización usa transacciones y compara las listas con la última lectura. Si detecta cambios externos —incluidos cambios realizados desde 3DBoys u otra sesión— detiene la escritura para evitar sobrescribirlos. Los cambios se guardan primero en el navegador; si falla la nube, los datos locales se conservan. Si hay datos locales y remotos, la aplicación solicita elegir qué fuente utilizar.
+## Firebase
 
-**Antes de activar Firebase:**
-1. Haz un respaldo del documento `talleres3dboys/principal`.
-2. Revisa las reglas de Firestore para que sólo usuarios autenticados y autorizados puedan leer/escribir.
-3. Crea manualmente las cuentas autorizadas en Firebase Authentication (no hay registro público).
-4. Configura las seis variables `VITE_FIREBASE_*`.
+La aplicación incorpora acceso por correo y contraseña, sin registro público. Las cuentas se crean desde Firebase Authentication.
 
-Para desarrollo, configura esas variables en `.env.local`. Para GitHub Pages, agrégalas como *Repository secrets* en **Settings → Secrets and variables → Actions → Secrets**. Son valores de configuración pública del cliente web; nunca incluyas cuentas de servicio ni credenciales administrativas.
+Configura estas seis variables como *Repository secrets* en **Settings → Secrets and variables → Actions → Secrets**:
 
-Si las variables no están definidas, la aplicación permanece en modo local.
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+Para desarrollo local, usa un archivo `.env.local` con las mismas variables. No incluyas credenciales de servicio ni claves administrativas en el cliente web.
+
+**Reglas de Firestore:** deben permitir leer y escribir el documento `plastiqueria/principal` sólo a las cuentas autorizadas. La condición genérica `request.auth != null` autentica al usuario, pero no limita por sí sola qué usuarios pueden acceder. Revisa las reglas desplegadas en Firebase Console antes de incorporar otras cuentas.
+
+## Respaldo y migración
+
+Exporta respaldos JSON periódicamente y conserva una copia fuera del equipo. La importación valida las colecciones, identificadores, códigos, cantidades y referencias antes de reemplazar el estado de la sesión y solicitar el guardado en Firestore. No importes un respaldo para resolver conflictos de sincronización: primero identifica cuál es la versión vigente.
+
+Se conservan los campos legados de productos, clientes y consignaciones para facilitar la compatibilidad con datos anteriores. Los movimientos históricos de material se reconstruyen cuando corresponde para evitar descontar dos veces el mismo consumo.
 
 ## PWA
 
-Incluye manifiesto, icono y caché de interfaz para instalar la aplicación y abrir la estructura básica sin conexión. La sincronización con Firestore requiere conexión.
+Incluye manifiesto, iconos y caché de recursos de interfaz para facilitar su instalación. La sincronización con Firestore requiere conexión.
 
 ## Desarrollo
 
