@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, assertProductionBatchCanReverse } from '../src/calculations/commerce.js';
+import { getProductStock, assertJobCanSell, assertProductCanMove, consignmentBalance, assertProductionBatchCanReverse, assertJobVariantCanSell } from '../src/calculations/commerce.js';
 
 const jobs = [
   { id: 'j1', data: { productoId: 'p1', piezasVendibles: 10 } },
@@ -143,4 +143,32 @@ test('las reimpresiones pueden pertenecer a una variante distinta sin mover el s
   assert.equal(getProductVariantStock('p-colors', 'black', [job], [], []).produced, 3);
   assert.equal(getProductVariantStock('p-colors', 'red', [job], [], []).produced, 4);
   assert.equal(getProductStock('p-colors', [job], [], []).produced, 7);
+});
+
+
+test('una venta vinculada a trabajo no puede consumir la variante producida por otro trabajo', () => {
+  const jobBlack = { id: 'job-black', data: { productoId: 'p1', variantId: 'black', piezasVendibles: 2 } };
+  const jobRed = { id: 'job-red', data: { productoId: 'p1', variantId: 'red', piezasVendibles: 10 } };
+  assert.throws(
+    () => assertJobVariantCanSell(jobBlack, 'red', 1, []),
+    /variante seleccionada\. Disponibles: 0/,
+  );
+  assert.deepEqual(assertJobVariantCanSell(jobBlack, 'black', 2, []), {
+    produced: 2, sold: 0, available: 2,
+  });
+  assert.throws(
+    () => assertJobVariantCanSell(jobBlack, 'black', 2, [{ jobId: 'job-black', variantId: 'black', cantidad: 1 }]),
+    /Disponibles: 1/,
+  );
+});
+
+test('una reimpresión de otro color puede venderse desde el mismo trabajo sin mezclar stock', () => {
+  const job = { id: 'job-mixed', data: {
+    productoId: 'p1', variantId: 'black', piezasVendibles: 3,
+    productionBatches: [{ id: 'batch-red', variantId: 'red', sellableQuantity: 4, status: 'active' }],
+  } };
+  assert.deepEqual(assertJobVariantCanSell(job, 'red', 4, []), {
+    produced: 4, sold: 0, available: 4,
+  });
+  assert.throws(() => assertJobVariantCanSell(job, 'red', 5, []), /Disponibles: 4/);
 });
