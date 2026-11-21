@@ -34,7 +34,6 @@ async function requestProductionBatchOptions(job, consumptions) {
       <div class="batch-material-fields" hidden>${rows||'<p>No hay materiales para modificar.</p>'}</div>
       <div class="production-batch-actions"><button type="button" class="management-button secondary" data-batch-cancel>Cancelar</button><button type="submit" class="management-button">Registrar reimpresión</button></div>
     </form>`;
-    document.body.append(dialog);
     const quantityToggle=dialog.querySelector('#batch-quantity-change');
     const materialToggle=dialog.querySelector('#batch-material-change');
     quantityToggle.addEventListener('change',()=>{dialog.querySelector('.batch-quantity-fields').hidden=!quantityToggle.checked;});
@@ -350,7 +349,7 @@ function renderCompletedJobs(root) {
         </details>
         ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
         <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
-        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
+        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+(batch.variantName?'Variante: '+esc(batch.variantName)+' · ':'')+' +Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
       </div></td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -488,6 +487,7 @@ function attachProducts(root) {
       if(reason===null)return;
       const reversalId=makeId('reversion-lote');
       const previousJobData=JSON.parse(JSON.stringify(job.data));
+      const previousProducts=JSON.parse(JSON.stringify(appState.products));
       const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
       const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
       reverseButton.disabled=true;
@@ -506,6 +506,7 @@ function attachProducts(root) {
         notify('Lote revertido y guardado en Firestore.');
       }catch(error){
         job.data=previousJobData;
+        appState.products.splice(0,appState.products.length,...previousProducts);
         inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
         inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
         alert('No se pudo completar la reversión: '+error.message);
