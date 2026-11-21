@@ -462,7 +462,6 @@ function attachProducts(root) {
   form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
     if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
-    const normalizedCode=code.toLocaleUpperCase('es');
     if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
     if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
     else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
@@ -630,7 +629,6 @@ function attachProducts(root) {
       job.data.variantId=variantId||null;
       saveAppState();
       // Actualiza los dos listados desde el mismo estado en memoria inmediatamente.
-      renderSellableProductsTable(root.querySelector('#sellable-products-table'));
       renderCompletedJobs(root.querySelector('#completed-jobs-table'));
       renderProductsTable(root.querySelector('#products-table'));
       renderAssignments(root.querySelector('#product-assignments'));
