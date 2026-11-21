@@ -477,11 +477,32 @@ function attachProducts(root) {
       let consumptions;
       try {
         consumptions=getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced);
+        if(!consumptions.length) throw new Error('No se encontró una receta de materiales para este trabajo. No se puede registrar la reimpresión sin un consumo verificable.');
         const missing=consumptions.filter(row=>!inventoryState.materials.some(material=>material.id===row.materialId));
         if(missing.length) throw new Error('El trabajo original contiene un material que ya no está en el inventario. Revisa el registro antes de reimprimir.');
-        const insufficient=consumptions.map(row=>({row,material:inventoryState.materials.find(material=>material.id===row.materialId)}))
-          .filter(({row,material})=>Number(material.stock||0)+1e-9<row.grams);
-        if(insufficient.length) throw new Error('Stock insuficiente para la reimpresión: '+insufficient.map(({row,material})=>material.nombre+' requiere '+row.grams.toFixed(1)+' g y tiene '+Number(material.stock||0).toFixed(1)+' g').join('; '));
+
+        // Por defecto se conserva la receta original. El cambio de color/material requiere confirmación expresa.
+        if(confirm('La reimpresión usará los mismos materiales y colores del trabajo original.\n\n¿Deseas cambiar algún material o color para esta reimpresión?')) {
+          const availableMaterials=inventoryState.materials.filter(material=>material.categoria==='Filamento'&&material.unidad==='g');
+          const revised=[];
+          for(const row of consumptions) {
+            const original=inventoryState.materials.find(material=>material.id===row.materialId);
+            const choices=[original,...availableMaterials.filter(material=>material.id!==original.id)];
+            const options=choices.map((material,index)=>(index+1)+'. '+material.nombre+' · '+Number(material.stock||0).toFixed(1)+' g disponibles').join('\n');
+            const selected=prompt('Material para sustituir «'+original.nombre+'» en esta reimpresión.\nConsumo calculado: '+row.grams.toFixed(1)+' g\n\n'+options+'\n\nEscribe el número. Conserva '+(choices.length+1)+' para mantener el material original.',String(choices.length+1));
+            if(selected===null) return;
+            const index=Number(selected);
+            if(!Number.isSafeInteger(index)||index<1||index>choices.length+1) throw new Error('Selección de material no válida.');
+            revised.push({...row,materialId:index===choices.length+1?original.id:choices[index-1].id});
+          }
+          consumptions=revised;
+        }
+        const combined=new Map();
+        for(const row of consumptions) combined.set(row.materialId,(combined.get(row.materialId)||0)+row.grams);
+        const insufficient=[...combined].map(([id,grams])=>({grams,material:inventoryState.materials.find(item=>item.id===id)}))
+          .filter(({grams,material})=>!material||Number(material.stock||0)+1e-9<grams);
+        if(insufficient.length) throw new Error('Stock insuficiente para la reimpresión: '+insufficient.map(({grams,material})=>(material?.nombre||'Material')+' requiere '+grams.toFixed(1)+' g y tiene '+Number(material?.stock||0).toFixed(1)+' g').join('; '));
+        consumptions=[...combined].map(([materialId,grams])=>({materialId,grams}));
       } catch(error) { alert(error.message); return; }
       const previousJobData=JSON.parse(JSON.stringify(job.data));
       const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
