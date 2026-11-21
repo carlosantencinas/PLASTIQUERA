@@ -137,6 +137,24 @@ export function getProductVariantStock(productId, variantId, jobs, sales, consig
   return { produced, sold, consigned, available: Math.max(0, produced - sold - consigned) };
 }
 
+
+/** Valida una venta contra las unidades de una variante de un trabajo concreto. */
+export function assertJobVariantCanSell(job, variantId, quantity, sales) {
+  const qty = positiveInteger(quantity);
+  if (!job?.id || !job?.data || !variantId) throw new Error('La venta requiere un trabajo y una variante válidos.');
+  const base = job.data?.variantId === variantId ? getJobBaseSellableQuantity(job) : 0;
+  const batches = (Array.isArray(job.data?.productionBatches) ? job.data.productionBatches : [])
+    .filter(batch => batch.status !== 'reversed' && (batch.variantId || job.data?.variantId || null) === variantId)
+    .reduce((sum, batch) => sum + Math.max(0, Number(batch.sellableQuantity) || 0), 0);
+  const produced = base + batches;
+  const sold = sales.filter(sale => sale.jobId === job.id &&
+    (sale.variantId || job.data?.variantId || null) === variantId)
+    .reduce((sum, sale) => sum + Number(sale.cantidad || 1), 0);
+  const available = Math.max(0, produced - sold);
+  if (qty > available) throw new Error('Este trabajo no tiene suficientes piezas de la variante seleccionada. Disponibles: ' + available + '.');
+  return { produced, sold, available };
+}
+
 export function assertVariantCanMove(productId, variantId, quantity, jobs, sales, consignments) {
   const qty = positiveInteger(quantity);
   const stock = getProductVariantStock(productId, variantId, jobs, sales, consignments);
