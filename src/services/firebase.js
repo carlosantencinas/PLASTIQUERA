@@ -22,5 +22,5 @@ export { app, auth, db, isConfigured as isFirebaseConfigured };
 export function getFirebaseStatus() {
   return isConfigured
     ? { configured: true, label: 'Firebase disponible', message: 'Inicia sesión para cargar y sincronizar el documento compartido del taller.' }
-    : { configured: false, label: 'Modo local', message: 'Los datos se guardan en este navegador. Configura Firebase para habilitar cuentas y sincronización.' };
+    : { configured: false, label: 'Firebase no configurado', message: 'La aplicación requiere Firebase para iniciar sesión y guardar datos. No se guardarán datos localmente; configura las credenciales para continuar.' };
 }
