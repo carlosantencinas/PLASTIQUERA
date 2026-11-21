@@ -17,6 +17,70 @@ const getProduct = id => appState.products.find(p => p.id === id);
 const getJob = id => appState.jobs.find(j => j.id === id);
 const findClientByName = (name, type) => { const key=String(name||'').trim().toLocaleLowerCase('es'); const matches=appState.clients.filter(client=>String(client.nombre||'').trim().toLocaleLowerCase('es')===key&&(!type||client.tipo===type)); return matches.length===1?matches[0]:null; };
 const notify = message => { const node=document.querySelector('#management-message'); if(node){node.textContent=message;node.hidden=false;setTimeout(()=>node.hidden=true,2600);} };
+async function requestProductionBatchOptions(job, consumptions) {
+  const materials=inventoryState.materials.filter(item=>item.categoria==='Filamento'&&item.unidad==='g');
+  const rows=consumptions.map((row,index)=>{
+    const original=inventoryState.materials.find(item=>item.id===row.materialId);
+    return `<div class="batch-change-row"><label><input type="checkbox" data-change-material="${index}"> Cambiar ${esc(original?.nombre||'material')} (${row.grams.toFixed(1)} g)</label><select data-material-choice="${index}" disabled><option value="">Selecciona filamento</option>${materials.map(item=>`<option value="${esc(item.id)}" ${item.id===row.materialId?'selected':''}>${esc(item.nombre)} · ${Number(item.stock||0).toFixed(1)} g</option>`).join('')}</select></div>`;
+  }).join('');
+  return new Promise(resolve=>{
+    const dialog=document.createElement('dialog');
+    dialog.className='production-batch-dialog';
+    dialog.innerHTML=`<form method="dialog" class="production-batch-form">
+      <div class="production-batch-head"><p class="eyebrow">PRODUCCIÓN</p><h3>Registrar reimpresión</h3><p>La receta original se conserva automáticamente. Marca solamente los cambios que deseas realizar.</p></div>
+      <label class="batch-change-toggle"><input type="checkbox" id="batch-quantity-change"> Modificar cantidades</label>
+      <div class="batch-quantity-fields" hidden><label>Piezas producidas<input name="produced" type="number" min="1" step="1" value="1" required></label><label>Piezas fallidas<input name="failed" type="number" min="0" step="1" value="0" required></label></div>
+      <label class="batch-change-toggle"><input type="checkbox" id="batch-material-change"> Cambiar material o color</label>
+      <div class="batch-material-fields" hidden>${rows||'<p>No hay materiales para modificar.</p>'}</div>
+      <div class="production-batch-actions"><button type="button" class="management-button secondary" data-batch-cancel>Cancelar</button><button type="submit" class="management-button">Registrar reimpresión</button></div>
+    </form>`;
+    document.body.append(dialog);
+    const quantityToggle=dialog.querySelector('#batch-quantity-change');
+    const materialToggle=dialog.querySelector('#batch-material-change');
+    quantityToggle.addEventListener('change',()=>{dialog.querySelector('.batch-quantity-fields').hidden=!quantityToggle.checked;});
+    materialToggle.addEventListener('change',()=>{dialog.querySelector('.batch-material-fields').hidden=!materialToggle.checked;});
+    dialog.querySelectorAll('[data-change-material]').forEach(check=>{
+      check.addEventListener('change',()=>{dialog.querySelector('[data-material-choice="'+check.dataset.changeMaterial+'"]').disabled=!check.checked;});
+    });
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;dialog.close();dialog.remove();resolve(value);};
+    dialog.querySelector('[data-batch-cancel]').addEventListener('click',()=>finish(null));
+    dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null);});
+    dialog.addEventListener('close',()=>finish(null));
+    dialog.addEventListener('submit',event=>{
+      event.preventDefault();
+      const produced=quantityToggle.checked?Number(dialog.elements.produced.value):1;
+      const failed=quantityToggle.checked?Number(dialog.elements.failed.value):0;
+      if(!Number.isSafeInteger(produced)||produced<=0||!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('Revisa las cantidades: las piezas fallidas deben estar entre cero y las producidas.');return;}
+      const revised=consumptions.map((row,index)=>{
+        const check=dialog.querySelector('[data-change-material="'+index+'"]');
+        const select=dialog.querySelector('[data-material-choice="'+index+'"]');
+        return check?.checked?{...row,materialId:select.value}:row;
+      });
+      if(revised.some(row=>!row.materialId)){alert('Selecciona el nuevo filamento para cada cambio marcado.');return;}
+      finish({produced,failed,consumptions:revised,quantityChanged:quantityToggle.checked});
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+
+function createVariantForBatch(product, materialIds) {
+  if(!product)return null;
+  const ids=[...new Set(materialIds)].sort();
+  const existing=getProductVariants(product).find(variant=>Array.isArray(variant.materialIds)&&[...variant.materialIds].sort().join('|')===ids.join('|'));
+  if(existing)return existing;
+  const names=ids.map(id=>inventoryState.materials.find(item=>item.id===id)?.nombre||'Filamento').join(' + ');
+  const suffix=names.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,18)||'COLOR';
+  const base=String(product.codigo)+'-'+suffix;
+  let code=base,index=2;
+  while(!isProductCodeAvailable(code,appState.products))code=base+'-'+index++;
+  const values=validateVariantInput({code,name:names},appState.products);
+  const variant={id:makeId('var'),...values,materialIds:ids,activo:true,createdAt:Date.now(),source:'production-batch'};
+  if(!Array.isArray(product.variantes))product.variantes=[];
+  product.variantes.push(variant);
+  return variant;
+}
 
 let active = 'dashboard';
 let pendingSaleProductId = null;
@@ -468,35 +532,18 @@ function attachProducts(root) {
     if(batchButton){
       const job=getJob(batchButton.dataset.productionBatch);
       if(!job?.data){alert('No se encontró el trabajo.');return;}
-      const produced=Number(prompt('¿Cuántas piezas se produjeron en esta reimpresión?', '1'));
-      if(!Number.isSafeInteger(produced)||produced<=0){alert('La cantidad producida debe ser un entero mayor que cero.');return;}
-      const failedInput=prompt('¿Cuántas piezas fallaron?', '0');
-      if(failedInput===null)return;
-      const failed=Number(failedInput);
-      if(!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('La cantidad fallida debe ser un entero entre cero y lo producido.');return;}
-      let consumptions;
+      let produced=1, failed=0, consumptions, batchOptions;
       try {
         consumptions=getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced);
         if(!consumptions.length) throw new Error('No se encontró una receta de materiales para este trabajo. No se puede registrar la reimpresión sin un consumo verificable.');
         const missing=consumptions.filter(row=>!inventoryState.materials.some(material=>material.id===row.materialId));
         if(missing.length) throw new Error('El trabajo original contiene un material que ya no está en el inventario. Revisa el registro antes de reimprimir.');
 
-        // Por defecto se conserva la receta original. El cambio de color/material requiere confirmación expresa.
-        if(confirm('La reimpresión usará los mismos materiales y colores del trabajo original.\n\n¿Deseas cambiar algún material o color para esta reimpresión?')) {
-          const availableMaterials=inventoryState.materials.filter(material=>material.categoria==='Filamento'&&material.unidad==='g');
-          const revised=[];
-          for(const row of consumptions) {
-            const original=inventoryState.materials.find(material=>material.id===row.materialId);
-            const choices=[original,...availableMaterials.filter(material=>material.id!==original.id)];
-            const options=choices.map((material,index)=>(index+1)+'. '+material.nombre+' · '+Number(material.stock||0).toFixed(1)+' g disponibles').join('\n');
-            const selected=prompt('Material para sustituir «'+original.nombre+'» en esta reimpresión.\nConsumo calculado: '+row.grams.toFixed(1)+' g\n\n'+options+'\n\nEscribe el número. Conserva '+(choices.length+1)+' para mantener el material original.',String(choices.length+1));
-            if(selected===null) return;
-            const index=Number(selected);
-            if(!Number.isSafeInteger(index)||index<1||index>choices.length+1) throw new Error('Selección de material no válida.');
-            revised.push({...row,materialId:index===choices.length+1?original.id:choices[index-1].id});
-          }
-          consumptions=revised;
-        }
+        batchOptions=await requestProductionBatchOptions(job,consumptions);
+        if(!batchOptions)return;
+        produced=batchOptions.produced;
+        failed=batchOptions.failed;
+        consumptions=batchOptions.consumptions;
         const combined=new Map();
         for(const row of consumptions) combined.set(row.materialId,(combined.get(row.materialId)||0)+row.grams);
         const insufficient=[...combined].map(([id,grams])=>({grams,material:inventoryState.materials.find(item=>item.id===id)}))
@@ -510,7 +557,10 @@ function attachProducts(root) {
       batchButton.disabled=true;
       try{
         if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
-        const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions},job.data.productionBatches);
+        const changedMaterials=consumptions.some((row,index)=>row.materialId!==getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced)[index]?.materialId);
+        const product=getProduct(job.data.productoId);
+        const variant=changedMaterials&&product?createVariantForBatch(product,consumptions.map(row=>row.materialId)):null;
+        const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions,variantId:variant?.id||job.data.variantId||null,variantName:variant?.nombre||null},job.data.productionBatches);
         applyProductionBatchMaterials(job,batch);
         job.data.productionBatches.push(batch);
         job.updatedAt=Date.now();
