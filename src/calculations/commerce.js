@@ -49,6 +49,8 @@ export function createProductionBatch(job, input, existingBatches = []) {
     failedQuantity: failed,
     sellableQuantity: produced - failed,
     materialConsumptions: [...merged].map(([materialId, grams]) => ({ materialId, grams })),
+    variantId: String(input?.variantId || job.data?.variantId || '').trim() || null,
+    variantName: String(input?.variantName || '').trim() || null,
     status: 'active',
     createdAt: Date.now(),
   };
