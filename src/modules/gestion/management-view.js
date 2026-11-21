@@ -3,6 +3,7 @@ import { appState, saveAppState, exportBackup, importBackup, makeId, DEFAULT_SET
 import { inventoryState, applyProductionBatchMaterials, reverseProductionBatchMaterials } from '../../services/inventory-store.js';
 import { getProductStock, getJobSellableQuantity, assertJobCanSell, assertProductCanMove, consignmentBalance, positiveInteger, assertVariantCanMove, getProductVariantStock, assertProductionBatchCanReverse, createProductionBatch, reverseProductionBatch } from '../../calculations/commerce.js';
 import { isProductCodeAvailable, validateVariantInput, getProductVariants } from '../../calculations/product-variants.js';
+import { getProductionBatchMaterialConsumptions } from '../../calculations/production-consumption.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -473,16 +474,15 @@ function attachProducts(root) {
       if(failedInput===null)return;
       const failed=Number(failedInput);
       if(!Number.isSafeInteger(failed)||failed<0||failed>produced){alert('La cantidad fallida debe ser un entero entre cero y lo producido.');return;}
-      const consumptions=[];
-      const materials=inventoryState.materials.filter(m=>m.unidad==='g'&&Number(m.stock)>0);
-      for(const material of materials){
-        const gramsInput=prompt('Gramos consumidos de '+material.nombre+' (stock: '+Number(material.stock).toFixed(1)+' g). Deja vacío si no se utilizó:','');
-        if(gramsInput===null)return;
-        if(!gramsInput.trim())continue;
-        const grams=Number(gramsInput);
-        if(!Number.isFinite(grams)||grams<=0){alert('Los gramos deben ser mayores que cero.');return;}
-        consumptions.push({materialId:material.id,grams});
-      }
+      let consumptions;
+      try {
+        consumptions=getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced);
+        const missing=consumptions.filter(row=>!inventoryState.materials.some(material=>material.id===row.materialId));
+        if(missing.length) throw new Error('El trabajo original contiene un material que ya no está en el inventario. Revisa el registro antes de reimprimir.');
+        const insufficient=consumptions.map(row=>({row,material:inventoryState.materials.find(material=>material.id===row.materialId)}))
+          .filter(({row,material})=>Number(material.stock||0)+1e-9<row.grams);
+        if(insufficient.length) throw new Error('Stock insuficiente para la reimpresión: '+insufficient.map(({row,material})=>material.nombre+' requiere '+row.grams.toFixed(1)+' g y tiene '+Number(material.stock||0).toFixed(1)+' g').join('; '));
+      } catch(error) { alert(error.message); return; }
       const previousJobData=JSON.parse(JSON.stringify(job.data));
       const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
       const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
