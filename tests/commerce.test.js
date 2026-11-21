@@ -128,3 +128,19 @@ test('reversión de lote valida relación de trabajo y variante', () => {
     /cantidad vendible/,
   );
 });
+
+
+test('las reimpresiones pueden pertenecer a una variante distinta sin mover el stock original', async () => {
+  const { getProductVariantStock, getProductStock, createProductionBatch } = await import('../src/calculations/commerce.js');
+  const job = { id: 'job-colors', data: { productoId: 'p-colors', variantId: 'black', piezasVendibles: 3, productionBatches: [] } };
+  const batch = createProductionBatch(job, {
+    id: 'batch-red', producedQuantity: 5, failedQuantity: 1,
+    materialConsumptions: [{ materialId: 'pla-red', grams: 80 }],
+    variantId: 'red', variantName: 'PLA rojo',
+  }, job.data.productionBatches);
+  job.data.productionBatches.push(batch);
+  assert.equal(batch.variantId, 'red');
+  assert.equal(getProductVariantStock('p-colors', 'black', [job], [], []).produced, 3);
+  assert.equal(getProductVariantStock('p-colors', 'red', [job], [], []).produced, 4);
+  assert.equal(getProductStock('p-colors', [job], [], []).produced, 7);
+});
