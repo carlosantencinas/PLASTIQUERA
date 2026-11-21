@@ -707,7 +707,10 @@ function attachSales(root) {
     if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
     if(product&&variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante seleccionada no pertenece al producto.');return;}
     if(job&&variantId){
-      try{assertJobVariantCanSell(job,variantId,qty,appState.sales);}catch(error){alert(error.message);return;}
+      try{
+        assertJobVariantCanSell(job,variantId,qty,appState.sales);
+        assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);
+      }catch(error){alert(error.message);return;}
     } else if(job&&!variantId&&job.data?.variantId){
       alert('Este trabajo está clasificado en una variante. Selecciona esa variante para registrar la venta.');return;
     } else if(product){
