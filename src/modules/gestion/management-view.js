@@ -298,6 +298,15 @@ function nextProductCode(prefix) {
   }, 0);
   return 'AM3D-' + prefix + '-' + String(max + 1).padStart(4,'0');
 }
+function nextVariantCode(product, name) {
+  const suffix = String(name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'VARIANTE';
+  const base = String(product?.codigo || 'AM3D') + '-' + suffix;
+  let code = base;
+  let index = 2;
+  while (!isProductCodeAvailable(code, appState.products)) code = base + '-' + index++;
+  return code;
+}
 function renderCompletedJobs(root, query='') {
   const completed = appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado')
     .sort((a,b) => Number(b.createdAt || b.updatedAt || b.data?.fecha || 0) - Number(a.createdAt || a.updatedAt || a.data?.fecha || 0));
@@ -452,7 +461,30 @@ function attachBackup(root) {
   });
 }
 function attachProducts(root) {
-  root.querySelector('#catalog-add-product').addEventListener('click',()=>{const tipo=prompt('Tipo de producto (ACC, FIG, HOG, etc.):','ACC');if(tipo===null)return;const codigo=prompt('Código único del producto:');if(codigo===null)return;const nombre=prompt('Nombre del producto:');if(nombre===null)return;const type=String(tipo).trim().toUpperCase(),code=String(codigo).trim(),name=String(nombre).trim();if(!code||!name||!PRODUCT_TYPES.some(([x])=>x===type)){alert('Completa un tipo válido, código y nombre.');return;}if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('Ese código ya está utilizado.');return;}appState.products.push({id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()});saveAppState();renderManagementView(root,'products');notify('Producto creado.');});
+  root.querySelector('#catalog-add-product').addEventListener('click',async()=>{
+    const typeText=prompt('Tipo de producto (DEC, FUN, REP, PER, MIN, ACC, HOG o PRO):','ACC');
+    if(typeText===null)return;
+    const type=String(typeText).trim().toUpperCase();
+    if(!PRODUCT_TYPES.some(([value])=>value===type)){alert('Selecciona un tipo válido.');return;}
+    const nameText=prompt('Nombre del producto:');
+    if(nameText===null)return;
+    const name=String(nameText).trim();
+    if(!name){alert('El nombre del producto es obligatorio.');return;}
+    const code=nextProductCode(type);
+    if(!confirm('Se generará el código '+code+'. ¿Crear el producto?'))return;
+    if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código generado ya existe. Vuelve a intentarlo.');return;}
+    const product={id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()};
+    appState.products.push(product);
+    try{
+      const persisted=await saveAppState();
+      if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+      renderManagementView(root,'products');notify('Producto creado con el código '+code+'.');
+    }catch(error){
+      appState.products=appState.products.filter(item=>item.id!==product.id);
+      alert('No se pudo crear el producto: '+error.message);
+      renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
+    }
+  });
   /* El alta se realiza desde el botón compacto; no hay formulario fijo en pantalla. */
   const form=null;
   if(form)form.addEventListener('submit',e=>{
@@ -472,7 +504,8 @@ function attachProducts(root) {
     if(addVariant){
       const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
       const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
-      const code=prompt('Código/SKU único de esta variante (por ejemplo, '+product.codigo+'-NEG):');if(code===null)return;
+      const suggestedCode=nextVariantCode(product,name);
+      const code=prompt('Código/SKU único de esta variante:',suggestedCode);if(code===null)return;
       try{
         const values=validateVariantInput({code,name},appState.products);
         if(!Array.isArray(product.variantes))product.variantes=[];
@@ -595,6 +628,39 @@ function attachProducts(root) {
     const sellJob=e.target.closest('[data-sell-job]');
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
+    if(create){
+      const job=getJob(create.dataset.createAssign);
+      const nameField=root.querySelector('[data-new-name="'+create.dataset.createAssign+'"]');
+      const typeField=root.querySelector('[data-new-type="'+create.dataset.createAssign+'"]');
+      const codeField=root.querySelector('[data-new-code="'+create.dataset.createAssign+'"]');
+      const name=String(nameField?.value||'').trim();
+      const type=String(typeField?.value||'').trim().toUpperCase();
+      const code=String(codeField?.value||'').trim();
+      if(!job?.data){alert('No se encontró el trabajo que deseas asignar.');return;}
+      if(!name||!code||!PRODUCT_TYPES.some(([value])=>value===type)){alert('Completa un nombre, tipo y código válido.');return;}
+      if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código '+code+' ya está utilizado.');return;}
+      const previousProductId=job.data.productoId??null;
+      const previousVariantId=job.data.variantId??null;
+      const product={id:makeId('prod'),codigo:code,tipo,nombre:name,notas:'',createdAt:Date.now()};
+      create.disabled=true;
+      appState.products.push(product);
+      job.data.productoId=product.id;
+      job.data.variantId=null;
+      job.updatedAt=Date.now();
+      try{
+        const persisted=await saveAppState();
+        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+        renderManagementView(root,'products');
+        notify('Producto creado y trabajo asignado con el código '+code+'.');
+      }catch(error){
+        appState.products=appState.products.filter(item=>item.id!==product.id);
+        job.data.productoId=previousProductId;
+        job.data.variantId=previousVariantId;
+        alert('No se pudo crear y asignar el producto: '+error.message);
+        renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
+      }
+      return;
+    }
     if(sellJob){
       const job=getJob(sellJob.dataset.sellJob),product=getProduct(job?.data?.productoId);
       if(!job||!product){alert('Primero asigna este trabajo a un producto del catálogo.');return;}
