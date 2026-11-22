@@ -206,31 +206,11 @@ function dashboard() {
 }
 
 function products() {
-  return `<div class="product-workspace">
-    <details class="management-card product-editor" id="product-editor">
-      <summary><span><b id="product-form-title">Nuevo producto</b><small>Crear o editar una ficha del catálogo</small></span><span class="product-editor-plus">+</span></summary>
-      <form id="product-form">
-        <input type="hidden" name="id">
-        <label class="management-field">Tipo de producto<select name="tipo">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label} (${code})</option>`).join('')}</select></label>
-        <label class="management-field">Código único<input name="codigo" required placeholder="AM3D-ACC-0001"></label>
-        <label class="management-field">Nombre<input name="nombre" required placeholder="Nombre del producto"></label>
-        <label class="management-field">Notas<textarea name="notas" rows="2" placeholder="Descripción general del modelo"></textarea></label>
-        <div class="management-actions"><button class="management-button" type="submit">Guardar producto</button><button class="management-button secondary" type="reset" id="product-reset">Limpiar</button></div>
-      </form>
-    </details>
-    <section class="management-card product-catalog-card">
-      <div class="product-catalog-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Productos</h3><p>Una ficha por modelo; variantes, existencias y etiquetas dentro de cada producto.</p></div><span class="product-count">${appState.products.length} modelos</span></div>
-      <div class="management-search-wrap"><input class="management-search" id="product-search" type="search" placeholder="Buscar por código, nombre o variante…"></div>
-      <div class="catalog-production-divider"><span>PRODUCTOS DEL CATÁLOGO</span><small>Ficha, variantes, códigos y existencias</small></div>
-      <div id="products-table" class="product-card-list"></div>
-      <div class="catalog-production-divider catalog-jobs-divider"><span>TRABAJOS POR VINCULAR Y PRODUCCIÓN</span><small>Asigna productos y códigos; controla ventas y reimpresiones desde cada trabajo</small></div>
-      <div class="production-panel-heading">
-        <div><h4>Trabajos terminados</h4><p>Los trabajos sin producto asignado se destacan para que puedas identificarlos y clasificarlos rápidamente.</p></div>
-        <span class="production-panel-count">${appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado').length} trabajos</span>
-      </div>
-      <div id="completed-jobs-table" class="production-job-list"></div>
-    </section>
-  </div>`;
+  return `<section class="management-card product-catalog-card catalog-operations-card">
+    <div class="product-catalog-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Catálogo y producción</h3><p>Productos, trabajos, códigos, cantidades, ventas y reimpresiones en una sola tabla.</p></div><button type="button" class="management-button" id="catalog-add-product">+ Nuevo producto</button></div>
+    <div class="management-search-wrap"><input class="management-search" id="product-search" type="search" placeholder="Buscar producto, código, variante, trabajo o cliente…"></div>
+    <div id="products-table" class="catalog-unified-table"></div>
+  </section>`;
 }
 function clients() {
   return `<div class="management-grid">
@@ -416,38 +396,13 @@ function printProductBarcode(product, variant = null) {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 function renderProductsTable(root, query='') {
-  const q=String(query||'').trim().toLocaleLowerCase('es');
-  const products=appState.products.filter(p=>{
-    const variants=getProductVariants(p);
-    return [p.nombre,p.codigo,p.tipo,p.notas,...variants.flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q);
-  });
-  if (!products.length) {
-    root.innerHTML=appState.products.length?'<p class="management-empty">No hay productos que coincidan con la búsqueda.</p>':'<p class="management-empty">Todavía no hay productos. Pulsa “Nuevo producto” para crear el primero.</p>';
-    return;
-  }
-  root.innerHTML=products.map(p=>{
-    const stock=stockFor(p.id), variants=getProductVariants(p);
-    const variantRows=variants.map(v=>{
-      const vs=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);
-      const materialNames=(v.materialIds||[]).map(id=>inventoryState.materials.find(item=>item.id===id)?.nombre).filter(Boolean).join(' + ');
-      return `<div class="product-variant-row">
-        <span class="product-variant-swatch" aria-hidden="true"></span>
-        <span class="product-variant-info"><b>${esc(v.nombre)}</b><code>${esc(v.codigo)}</code><small>${materialNames?esc(materialNames)+' · ':''}${vs.available} disponibles <i>·</i> ${vs.produced} producidas <i>·</i> ${vs.sold} vendidas <i>·</i> ${vs.consigned} en tienda</small></span>
-        <button type="button" class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button>
-      </div>`;
-    }).join('');
-    const type=PRODUCT_TYPES.find(([code])=>code===p.tipo)?.[1]||p.tipo||'Sin clasificar';
-    return `<article class="product-catalog-item" data-product-card>
-      <div class="product-card-main">
-        <div class="product-card-identity"><span class="product-type-label">${esc(type)}</span><h4>${esc(p.nombre)}</h4><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div>
-        <div class="product-stock-summary"><b>${stock.available}</b><span>disponibles</span><small>${stock.produced} producidas</small></div>
-      </div>
-      <div class="product-card-footer">
-        <details class="product-variant-details"><summary>Variantes <b>${variants.length}</b></summary><div class="product-variant-list">${variantRows||'<p class="management-empty">Aún no hay variantes individuales.</p>'}</div><button type="button" class="management-link product-add-variant" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details>
-        <div class="product-card-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta general</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
-      </div>
-    </article>`;
-  }).join('');
+ const q=String(query||'').trim().toLocaleLowerCase('es');
+ const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q));
+ const jobs=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')&&[j.data?.nombre,j.data?.cliente,getProduct(j.data?.productoId)?.nombre,getProduct(j.data?.productoId)?.codigo].join(' ').toLocaleLowerCase('es').includes(q));
+ const rows=[];
+ products.forEach(p=>{const st=stockFor(p.id),vs=getProductVariants(p);rows.push(`<div class="catalog-unified-row catalog-product-row"><div><span class="catalog-row-kind">PRODUCTO</span><b>${esc(p.nombre)}</b><code>${esc(p.codigo)}</code></div><div><b>${st.available}</b> disponibles<small>${st.produced} producidas · ${st.sold} vendidas</small></div><div class="catalog-row-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div><details><summary>Variantes y códigos (${vs.length})</summary>${vs.map(v=>{const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="catalog-variant-line"><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code> · ${x.available} disponibles <button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('')}<button class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details></div>`);});
+ jobs.forEach(j=>{const p=getProduct(j.data?.productoId),variants=getProductVariants(p),variant=variants.find(v=>v.id===j.data?.variantId),qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),status=!p?'SIN PRODUCTO / CÓDIGO':variants.length&&!variant?'FALTA VARIANTE / CÓDIGO': 'ASIGNADO · '+(variant?.codigo||p.codigo);rows.push(`<div class="catalog-unified-row catalog-job-row ${!p?'catalog-job-unassigned':''}"><div><span class="catalog-row-kind">TRABAJO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small><span class="catalog-assignment-state">${esc(status)}</span></div><div class="catalog-quantities"><b>${qty}</b> prod. · <b>${sold}</b> vend. · <b>${available}</b> disp.</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar producto…</option>${appState.products.map(x=>`<option value="${esc(x.id)}" ${p?.id===x.id?'selected':''}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select><select data-existing-variant="${esc(j.id)}" ${!variants.length?'disabled':''}><option value="">Seleccionar variante…</option>${variants.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar código</button></div><div class="catalog-row-actions">${available? `<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button></div><details><summary>Historial: ${appState.sales.filter(x=>x.jobId===j.id).length} ventas · ${(j.data.productionBatches||[]).length} reimpresiones</summary>${appState.sales.filter(x=>x.jobId===j.id).map(x=>`<p>${dateText(x.fecha)} · ${x.cantidad||1} unidades · ${money(x.monto)}</p>`).join('')}${(j.data.productionBatches||[]).map(x=>`<p>${dateText(x.date)} · ${x.producedQuantity} producidas · ${x.sellableQuantity} vendibles · ${x.status==='reversed'?'Revertida':'Activa'} ${x.status==='reversed'?'':`<button class="management-link danger" data-reverse-production-batch="${esc(j.id)}" data-batch-id="${esc(x.id)}">Revertir</button>`}</p>`).join('')}</details></div>`);});
+ root.innerHTML=rows.length?`<div class="catalog-table-head"><span>PRODUCTO / TRABAJO</span><span>CANTIDADES Y STOCK</span><span>ASIGNACIÓN / CÓDIGOS</span><span>VENTAS Y PRODUCCIÓN</span></div>${rows.join('')}`:'<p class="management-empty">No hay productos ni trabajos que coincidan.</p>';
 }
 function renderAssignments(root) {
   if (!appState.jobs.length) { root.innerHTML='<p class="management-empty">Registra primero un trabajo para poder asignarlo.</p>'; return; }
