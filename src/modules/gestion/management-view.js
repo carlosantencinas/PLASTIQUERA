@@ -407,7 +407,7 @@ function printProductBarcode(product, variant = null) {
 
 function renderProductsTable(root, query='') {
  const q=String(query||'').trim().toLocaleLowerCase('es');
- const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q));
+ const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo]),...appState.jobs.filter(j=>j.data?.productoId===p.id).flatMap(j=>[j.data?.nombre,j.data?.cliente])].join(' ').toLocaleLowerCase('es').includes(q));
  const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado'));
  const jobsForProduct=id=>completed.filter(j=>j.data?.productoId===id);
  const unassigned=completed.filter(j=>!j.data?.productoId);
@@ -716,7 +716,7 @@ function attachProducts(root) {
     if(assign){
       const job=getJob(assign.dataset.assignExisting);
       const select=root.querySelector('[data-existing-product="'+assign.dataset.assignExisting+'"]');
-      const productId=String(select?.value||'');
+      const productId=String(select?select.value:(job?.data?.productoId||''));
       const product=appState.products.find(item=>item.id===productId);
       if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
       const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');
