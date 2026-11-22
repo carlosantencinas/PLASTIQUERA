@@ -46,9 +46,11 @@ export function calculateJob(data) {
 
 /** Compatibilidad con trabajos antiguos que no guardaban piezasVendibles. */
 export function getSellablePieces(job) {
-  return job.data.piezasVendibles !== undefined
-    ? job.data.piezasVendibles
-    : 1;
+  const data = job?.data || {};
+  if (data.piezas !== undefined && data.piezas !== null) {
+    return Math.max(0, Math.floor(Number(data.piezas) - Number(data.piezasFallidas || 0)));
+  }
+  return Math.max(0, Math.floor(Number(data.piezasVendibles ?? 1)));
 }
 
 /** Precio por pieza para lotes; precio total para trabajos de una sola pieza. */
