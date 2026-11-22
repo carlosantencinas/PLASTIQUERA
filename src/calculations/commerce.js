@@ -6,11 +6,12 @@ export function positiveInteger(value, label = 'La cantidad') {
 
 export function getJobBaseSellableQuantity(job) {
   const data = job?.data || {};
-  const explicit = data.piezasVendibles;
-  const original = explicit !== undefined && explicit !== null
-    ? Number(explicit)
-    : Number(data.piezas ?? 1) - Number(data.piezasFallidas ?? 0);
-  return Number.isFinite(original) ? Math.max(0, original) : 0;
+  // piezasVendibles es un valor derivado y puede haber quedado desactualizado
+  // en registros antiguos. La cantidad fuente es piezas menos piezasFallidas.
+  const original = data.piezas !== undefined && data.piezas !== null
+    ? Number(data.piezas) - Number(data.piezasFallidas ?? 0)
+    : Number(data.piezasVendibles ?? 1);
+  return Number.isFinite(original) ? Math.max(0, Math.floor(original)) : 0;
 }
 
 export function getJobSellableQuantity(job) {
