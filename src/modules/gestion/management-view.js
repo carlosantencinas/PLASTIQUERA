@@ -230,7 +230,8 @@ function products() {
       </div>
       <div id="completed-jobs-table" class="production-job-list"></div>
     </section>
-  </div>
+  </div>`;
+}
 function clients() {
   return `<div class="management-grid">
     <form class="management-card" id="client-form"><h3 id="client-form-title">Nuevo cliente o tienda</h3><input type="hidden" name="id">
