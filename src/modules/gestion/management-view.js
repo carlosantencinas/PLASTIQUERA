@@ -452,8 +452,10 @@ function attachBackup(root) {
   });
 }
 function attachProducts(root) {
-  const form=root.querySelector('#product-form');
-  form.addEventListener('submit',e=>{
+  root.querySelector('#catalog-add-product').addEventListener('click',()=>{const tipo=prompt('Tipo de producto (ACC, FIG, HOG, etc.):','ACC');if(tipo===null)return;const codigo=prompt('Código único del producto:');if(codigo===null)return;const nombre=prompt('Nombre del producto:');if(nombre===null)return;const type=String(tipo).trim().toUpperCase(),code=String(codigo).trim(),name=String(nombre).trim();if(!code||!name||!PRODUCT_TYPES.some(([x])=>x===type)){alert('Completa un tipo válido, código y nombre.');return;}if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('Ese código ya está utilizado.');return;}appState.products.push({id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()});saveAppState();renderManagementView(root,'products');notify('Producto creado.');});
+  /* El alta se realiza desde el botón compacto; no hay formulario fijo en pantalla. */
+  const form=null;
+  if(form)form.addEventListener('submit',e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
     if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
     if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
@@ -461,7 +463,7 @@ function attachProducts(root) {
     else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
-  root.querySelector('#product-search').addEventListener('input',e=>{renderProductsTable(root.querySelector('#products-table'),e.target.value);renderCompletedJobs(root.querySelector('#completed-jobs-table'),e.target.value);});
+  root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
     const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
@@ -479,7 +481,7 @@ function attachProducts(root) {
       }catch(error){alert(error.message);}
       return;
     }
-    if(edit){const p=getProduct(edit.dataset.productEdit);root.querySelector('#product-editor').open=true;form.elements.id.value=p.id;form.elements.tipo.value=p.tipo||'ACC';form.elements.codigo.value=p.codigo;form.elements.nombre.value=p.nombre;form.elements.notas.value=p.notas||'';root.querySelector('#product-form-title').textContent='Editar producto';}
+    if(edit){const p=getProduct(edit.dataset.productEdit);if(!p)return;const name=prompt('Nombre del producto:',p.nombre);if(name===null)return;const code=prompt('Código del producto:',p.codigo);if(code===null)return;const type=prompt('Tipo del producto:',p.tipo||'ACC');if(type===null)return;if(!name.trim()||!code.trim()||!PRODUCT_TYPES.some(([x])=>x===type.trim().toUpperCase())){alert('Datos de producto no válidos.');return;}if(!isProductCodeAvailable(code.trim(),appState.products,{productId:p.id,kind:'product'})){alert('Ese código ya está utilizado.');return;}Object.assign(p,{nombre:name.trim(),codigo:code.trim(),tipo:type.trim().toUpperCase()});saveAppState();renderManagementView(root,'products');notify('Producto actualizado.');}
     if(del){const id=del.dataset.productDelete;
       const hasSales=appState.sales.some(s=>s.productoId===id);
       const hasConsignments=appState.consignments.some(c=>c.productoId===id);
@@ -488,7 +490,7 @@ function attachProducts(root) {
       if(!confirm('¿Eliminar este producto sin movimientos ni trabajos asociados?'))return;
       appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
   });
-  root.querySelector('#completed-jobs-table').addEventListener('change',e=>{
+  root.querySelector('#products-table').addEventListener('change',e=>{
     const productSelect=e.target.closest('[data-existing-product]');
     if(productSelect){const jobId=productSelect.dataset.existingProduct;const product=getProduct(productSelect.value);const variantSelect=root.querySelector('[data-existing-variant="'+jobId+'"]');if(variantSelect){variantSelect.innerHTML='<option value="">Sin variante</option>'+getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');}return;}
     const type=e.target.closest('[data-new-type]');
@@ -836,7 +838,7 @@ function attachFinance(root) {
 export function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
-  if(section==='products'){renderCompletedJobs(container.querySelector('#completed-jobs-table'));renderProductsTable(container.querySelector('#products-table'));attachProducts(container);}
+  if(section==='products'){renderProductsTable(container.querySelector('#products-table'));attachProducts(container);}
   if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
