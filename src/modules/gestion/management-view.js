@@ -596,20 +596,23 @@ function attachProducts(root) {
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
     if(sellJob){
-      const job=getJob(sellJob.dataset.sellJob);
-      if(!job)return;
-      pendingSaleJobId=job.id;
-      pendingSaleProductId=job.data?.productoId||null;
-      location.hash='#ventas';
-      renderManagementView(document.querySelector('#management-root'),'sales');
-      const saleForm=document.querySelector('#management-root #sale-form');
-      if(saleForm){
-        saleForm.elements.jobId.value=job.id;
-        if(pendingSaleProductId)saleForm.elements.productoId.value=pendingSaleProductId;
-        const unit=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
-        if(unit>0)saleForm.elements.monto.value=unit.toFixed(2);
-        saleForm.elements.cantidad.focus();
-      }
+      const job=getJob(sellJob.dataset.sellJob),product=getProduct(job?.data?.productoId);
+      if(!job||!product){alert('Primero asigna este trabajo a un producto del catálogo.');return;}
+      const variants=getProductVariants(product),variant=variants.find(v=>v.id===job.data?.variantId);
+      if(variants.length&&!variant){alert('Selecciona y guarda la variante/código antes de vender.');return;}
+      const qtyText=prompt('Cantidad a vender. Disponibles: '+Math.max(0,pieces(job)-appState.sales.filter(x=>x.jobId===job.id).reduce((n,x)=>n+Number(x.cantidad||1),0)),'1');
+      if(qtyText===null)return;const qty=Number(qtyText);
+      if(!Number.isSafeInteger(qty)||qty<1){alert('Ingresa una cantidad entera válida.');return;}
+      const unit=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
+      const amountText=prompt('Monto total de la venta (Bs):',String((unit*qty).toFixed(2)));
+      if(amountText===null)return;const amount=Number(amountText);
+      if(!Number.isFinite(amount)||amount<=0){alert('Ingresa un monto válido.');return;}
+      const client=prompt('Cliente (opcional):','')??'';
+      try{assertJobCanSell(job,qty,appState.sales);if(variant)assertJobVariantCanSell(job,variant.id,qty,appState.sales);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}
+      const sale={id:makeId('venta'),clientId:findClientByName(client)?.id||null,jobId:job.id,jobNombre:job.data.nombre||'',productoId:product.id,variantId:variant?.id||null,productoNombre:product.nombre,cliente:client.trim(),cantidad:qty,monto:amount,fecha:Date.now(),metodoPago:'No especificado',vendidoPor:'',notas:'',createdAt:Date.now()};
+      appState.sales.push(sale);sellJob.disabled=true;
+      try{const persisted=await saveAppState();if(!persisted)throw new Error('Firestore no confirmó el registro.');renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search').value);notify('Venta registrada en el catálogo.');}
+      catch(error){appState.sales=appState.sales.filter(item=>item.id!==sale.id);alert('No se pudo guardar la venta: '+error.message);renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search').value);}
       return;
     }
     if(assign){
