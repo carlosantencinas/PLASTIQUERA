@@ -224,12 +224,13 @@ function products() {
       <div id="products-table" class="product-card-list"></div>
     </section>
   </div>
-  <details class="management-card product-secondary-section">
-    <summary><span>Trabajos y asignaciones</span><small>Vincular trabajos, registrar reimpresiones y revisar producción</small></summary>
-    <div class="product-operations-grid">
-      <section><h4>Trabajos realizados y reimpresiones</h4><div id="completed-jobs-table" class="management-table-wrap"></div></section>
-      <section><h4>Asignación general de trabajos</h4><div id="product-assignments"></div></section>
+  <details class="management-card product-secondary-section" id="production-operations" open>
+    <summary><span>Trabajos y asignaciones</span><small>Un solo panel para clasificar, controlar stock y gestionar reimpresiones</small></summary>
+    <div class="production-panel-heading">
+      <div><h4>Producción terminada</h4><p>Asigna cada trabajo a un producto y, si corresponde, a una variante. Consulta unidades disponibles y acciones sin desplazamiento horizontal.</p></div>
+      <span class="production-panel-count">${appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado').length} trabajos</span>
     </div>
+    <div id="completed-jobs-table" class="production-job-list"></div>
   </details>`;
 }
 function clients() {
@@ -325,43 +326,51 @@ function renderCompletedJobs(root) {
     root.innerHTML = '<p class="management-empty">Todavía no hay trabajos realizados. Cuando marques un trabajo como realizado aparecerá aquí automáticamente.</p>';
     return;
   }
-  root.innerHTML = `<table class="management-table production-jobs-table"><thead><tr>
-    <th>Trabajo realizado</th><th>Producción</th><th>Vendidas</th><th>No vendidas</th><th>Estado</th><th>Producto / código</th><th>Acciones</th>
-  </tr></thead><tbody>${completed.map(job => {
+  root.innerHTML = completed.map(job => {
     const quantity = pieces(job);
     const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
     const available = Math.max(0,quantity-sold);
     const product = getProduct(job.data.productoId);
-    const soldItems = appState.sales.filter(sale => sale.jobId === job.id);
-    const soldDetail = soldItems.length ? soldItems.map(sale => dateText(sale.fecha)+' · '+(sale.cliente||'Sin cliente')+' · '+(sale.cantidad||1)+' pza · '+money(sale.monto)).join(' | ') : 'Sin ventas registradas';
-    const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
+    const variants = getProductVariants(product);
     const selectedCategory = product?.tipo || 'ACC';
     const prefix = PRODUCT_TYPES.some(([code])=>code===selectedCategory) ? selectedCategory : 'ACC';
-    return `<tr>
-      <td><b>${esc(job.data.nombre)}</b><small>${esc(job.data.cliente || 'Sin cliente')} · ${dateText(job.data.fecha)}</small></td>
-      <td><b>${quantity}</b> piezas</td><td>${sold}</td><td><b>${available}</b></td>
-      <td><span class="production-status production-status-${status[0]}" title="${esc('Ventas: '+soldDetail+' · Vendidas: '+sold+' · Disponibles: '+available)}">${status[1]} ⓘ</span><div class="production-stock-bar" title="Vendidas: ${sold} · Disponibles: ${available}"><i style="width:${quantity ? sold/quantity*100 : 0}%"></i></div></td>
-      <td>${product ? `<b>${esc(product.codigo)}</b><small>${esc(product.nombre)}</small>` : '<span class="production-status production-status-unassigned">Sin clasificar</span>'}</td>
-      <td><div class="production-assignment">
-        <select data-existing-product="${esc(job.id)}" aria-label="Producto existente para ${esc(job.data.nombre)}">
-          <option value="">Asignar producto existente</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
-        </select>
-        <select data-existing-variant="${esc(job.id)}" aria-label="Variante de ${esc(job.data.nombre)}"><option value="">Sin variante</option>${getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'" '+(job.data.variantId===v.id?'selected':'')+'>'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('')}</select><button type="button" class="management-link" data-assign-existing="${esc(job.id)}">Asignar</button>
-        <details class="production-new-product">
-          <summary>Crear código nuevo</summary>
-          <div class="production-new-fields">
-            <input data-new-name="${esc(job.id)}" value="${esc(job.data.nombre)}" aria-label="Nombre del producto" placeholder="Nombre del producto">
-            <select data-new-type="${esc(job.id)}" aria-label="Tipo de producto">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}" ${prefix===code?'selected':''}>${label}</option>`).join('')}</select>
-            <input data-new-code="${esc(job.id)}" value="${nextProductCode(prefix)}" aria-label="Código del producto">
-            <button type="button" class="management-button" data-create-assign="${esc(job.id)}">Crear y asignar</button>
-          </div>
-        </details>
-        ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender</button>` : ''}
-        <button type="button" class="management-link" data-production-batch="${esc(job.id)}">Registrar reimpresión</button>
-        ${(Array.isArray(job.data.productionBatches)?job.data.productionBatches:[]).length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+job.data.productionBatches.length+')</summary><ul>'+job.data.productionBatches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+(batch.variantName?'Variante: '+esc(batch.variantName)+' · ':'')+' · '+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
-      </div></td>
-    </tr>`;
-  }).join('')}</tbody></table>`;
+    const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
+    const soldItems = appState.sales.filter(sale => sale.jobId === job.id);
+    const soldDetail = soldItems.length ? soldItems.map(sale => dateText(sale.fecha)+' · '+(sale.cliente||'Sin cliente')+' · '+(sale.cantidad||1)+' pza · '+money(sale.monto)).join(' | ') : 'Sin ventas registradas';
+    const batches = Array.isArray(job.data.productionBatches) ? job.data.productionBatches : [];
+    return `<article class="production-job-card">
+      <div class="production-job-top">
+        <div class="production-job-identity"><span class="production-job-date">${dateText(job.data.fecha)}</span><h5>${esc(job.data.nombre || 'Trabajo sin nombre')}</h5><p>${esc(job.data.cliente || 'Sin cliente')}</p></div>
+        <span class="production-status production-status-${status[0]}" title="${esc('Ventas: '+soldDetail+' · Vendidas: '+sold+' · Disponibles: '+available)}">${status[1]}</span>
+      </div>
+      <div class="production-job-metrics">
+        <div><small>PRODUCIDAS</small><b>${quantity}</b></div>
+        <div><small>VENDIDAS</small><b>${sold}</b></div>
+        <div><small>DISPONIBLES</small><b>${available}</b></div>
+        <div class="production-job-stock"><div class="production-stock-bar"><i style="width:${quantity ? Math.min(100,sold/quantity*100) : 0}%"></i></div><small>Stock del trabajo</small></div>
+      </div>
+      <div class="production-job-link">
+        <label>Producto<select data-existing-product="${esc(job.id)}">
+          <option value="">Sin clasificar / asignar producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
+        </select></label>
+        <label>Variante<select data-existing-variant="${esc(job.id)}" ${!variants.length?'disabled':''}>
+          <option value="">${variants.length?'Sin variante':'Este producto no tiene variantes'}</option>${variants.map(v=>'<option value="'+esc(v.id)+'" '+(job.data.variantId===v.id?'selected':'')+'>'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('')}
+        </select></label>
+        <button type="button" class="management-button production-assign-button" data-assign-existing="${esc(job.id)}">Guardar asignación</button>
+      </div>
+      <div class="production-job-actions">
+        ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender unidades</button>` : ''}
+        <button type="button" class="management-button secondary" data-production-batch="${esc(job.id)}">+ Registrar reimpresión</button>
+        <details class="production-new-product"><summary>Crear producto nuevo desde este trabajo</summary><div class="production-new-fields">
+          <input data-new-name="${esc(job.id)}" value="${esc(job.data.nombre)}" aria-label="Nombre del producto" placeholder="Nombre del producto">
+          <select data-new-type="${esc(job.id)}" aria-label="Tipo de producto">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}" ${prefix===code?'selected':''}>${label}</option>`).join('')}</select>
+          <input data-new-code="${esc(job.id)}" value="${nextProductCode(prefix)}" aria-label="Código del producto">
+          <button type="button" class="management-button" data-create-assign="${esc(job.id)}">Crear y asignar</button>
+        </div></details>
+      </div>
+      ${batches.length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+batches.length+')</summary><ul>'+batches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+(batch.variantName?'Variante: '+esc(batch.variantName)+' · ':'')+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
+    </article>`;
+  }).join('');
 }
 function printProductBarcode(product, variant = null) {
   const code = String(variant?.codigo || product?.codigo || '').trim();
@@ -664,7 +673,7 @@ function attachProducts(root) {
         if(!persisted)throw new Error('Firestore no confirmó el guardado.');
         renderCompletedJobs(root.querySelector('#completed-jobs-table'));
         renderProductsTable(root.querySelector('#products-table'));
-        renderAssignments(root.querySelector('#product-assignments'));
+        
         notify('Trabajo asignado y guardado en Firebase.');
       }catch(error){
         job.data.productoId=previousProductId;
@@ -877,7 +886,7 @@ function attachFinance(root) {
 export function renderManagementView(container, section='dashboard') {
   active=section;container.innerHTML=shell(section);
   attachBackup(container);
-  if(section==='products'){renderCompletedJobs(container.querySelector('#completed-jobs-table'));renderProductsTable(container.querySelector('#products-table'));renderAssignments(container.querySelector('#product-assignments'));attachProducts(container);}
+  if(section==='products'){renderCompletedJobs(container.querySelector('#completed-jobs-table'));renderProductsTable(container.querySelector('#products-table'));attachProducts(container);}
   if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
   if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
   if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
