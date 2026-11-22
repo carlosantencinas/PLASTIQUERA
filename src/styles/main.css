@@ -1065,3 +1065,53 @@ body { background: #f5f5f2; }
  .product-count{font-size:10px}
  .product-variant-info small{font-size:8px}
 }
+
+
+/* AM3D · panel de producción en tarjetas: sin tabla ancha ni scroll interno */
+.product-secondary-section { min-width:0; overflow:visible; }
+.product-secondary-section > summary { gap:7px 14px; padding:4px 0 8px; }
+.product-secondary-section > summary small { flex-basis:100%; margin-left:25px; color:#737985; font-size:11px; font-weight:500; line-height:1.45; }
+.product-secondary-section[open] > summary { margin-bottom:18px; }
+.production-panel-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin:0 0 14px; padding:0 0 12px; border-bottom:1px solid #eceef2; }
+.production-panel-heading h4 { margin:0 0 5px; color:#1d1d1b; font-size:14px; }
+.production-panel-heading p { max-width:760px; margin:0; color:#6f7580; font-size:11px; line-height:1.5; }
+.production-panel-count { flex:0 0 auto; padding:6px 10px; border-radius:999px; background:#f1f2f5; color:#454b55; font-size:11px; font-weight:750; }
+.production-job-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:13px; min-width:0; overflow:visible; }
+.production-job-card { display:grid; gap:12px; min-width:0; padding:15px; border:1px solid #e6e8ed; border-radius:12px; background:#fff; box-shadow:0 2px 7px rgba(20,24,32,.035); }
+.production-job-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; min-width:0; }
+.production-job-identity { min-width:0; }
+.production-job-identity h5 { margin:3px 0 3px; color:#1d1d1b; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
+.production-job-identity p { margin:0; color:#707783; font-size:11px; overflow-wrap:anywhere; }
+.production-job-date { color:#8b9099; font-size:10px; font-weight:650; }
+.production-job-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+.production-job-metrics > div { min-width:0; padding:8px 9px; border:1px solid #edf0f3; border-radius:8px; background:#fafbfc; }
+.production-job-metrics small { display:block; color:#858b95; font-size:8px; font-weight:800; letter-spacing:.045em; }
+.production-job-metrics b { display:block; margin-top:3px; color:#222832; font-size:18px; font-variant-numeric:tabular-nums; }
+.production-job-metrics .production-job-stock { grid-column:1/-1; display:flex; align-items:center; gap:10px; padding:2px 1px; border:0; background:transparent; }
+.production-job-stock .production-stock-bar { flex:1; min-width:0; margin:0; }
+.production-job-stock small { white-space:nowrap; }
+.production-job-link { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:end; min-width:0; }
+.production-job-link label { display:grid; gap:5px; min-width:0; color:#656c77; font-size:10px; font-weight:700; }
+.production-job-link select { width:100%; min-width:0; height:36px; padding:6px 8px; border:1px solid #d9dee7; border-radius:7px; background:#fff; color:#202633; font:inherit; font-size:11px; }
+.production-job-link select:disabled { background:#f3f4f6; color:#9298a2; }
+.production-assign-button { grid-column:1/-1; justify-self:start; min-height:34px; padding:7px 13px; }
+.production-job-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding-top:9px; border-top:1px solid #f0f1f3; }
+.production-job-actions .management-button { min-height:34px; padding:7px 10px; font-size:10px; }
+.production-job-actions .production-new-product { flex:1 1 100%; min-width:0; }
+.production-job-actions .production-new-product summary { padding:5px 0; color:#a20a12; cursor:pointer; font-size:11px; font-weight:700; }
+.production-batch-history { min-width:0; padding-top:8px; border-top:1px dashed #e6e8ed; }
+.production-batch-history summary { color:#555d69; cursor:pointer; font-size:11px; font-weight:700; }
+.production-batch-history ul { display:grid; gap:8px; margin:9px 0 0; padding-left:17px; }
+.production-batch-history li { min-width:0; color:#4f5661; font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
+.production-batch-history li small { display:block; color:#858b95; overflow-wrap:anywhere; }
+.production-job-card .production-status { flex:0 0 auto; }
+@media(max-width:1000px) { .production-job-list { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+ .production-panel-heading { flex-direction:column; gap:8px; }
+ .production-job-card { padding:12px; }
+ .production-job-link { grid-template-columns:1fr; }
+ .production-assign-button { grid-column:auto; width:100%; }
+ .production-job-metrics b { font-size:16px; }
+ .production-job-actions { align-items:stretch; }
+ .production-job-actions .management-button { flex:1 1 auto; }
+}
