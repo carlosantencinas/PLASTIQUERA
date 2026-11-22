@@ -150,11 +150,11 @@ function renderPreview(data, calc) {
 
 function printProductionLabels(selectedJobs) {
   const labels = selectedJobs.flatMap(job => {
-    const quantity = Math.max(0, Number(job.data.piezasVendibles ?? job.data.piezas ?? 1));
+    const quantity = Math.max(0, Number(job.data.piezas !== undefined
+      ? Number(job.data.piezas) - Number(job.data.piezasFallidas || 0)
+      : job.data.piezasVendibles ?? 1));
     return Array.from({ length: quantity }, (_, index) => ({
-      job,
-      piece: index + 1,
-      quantity,
+      job, piece: index + 1, quantity,
       code: 'PLJ' + String(job.id || '').replace(/[^a-z0-9]/gi, '').toUpperCase() + 'P' + String(index + 1).padStart(3, '0'),
     }));
   });
@@ -162,43 +162,64 @@ function printProductionLabels(selectedJobs) {
     window.alert('No hay piezas vendibles para generar etiquetas de producción.');
     return;
   }
-  const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
-  const popup = window.open('', '_blank', 'width=900,height=700');
-  if (!popup) {
-    window.alert('El navegador bloqueó la ventana de etiquetas. Permite las ventanas emergentes para este sitio.');
-    return;
-  }
-  popup.document.open();
-  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas de producción - Agencia de Modelos 3D</title>
-    <style>
-      @page { size:auto; margin:8mm; }
-      * { box-sizing:border-box; }
-      body { margin:0; padding:0; color:#111; font:10px Arial,sans-serif; }
-      .print-brand { display:flex; justify-content:center; margin:0 auto 7mm; }
-      .print-brand img { display:block; width:58mm; max-height:24mm; object-fit:contain; }
-       .labels { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5mm; }
-      .label { min-height:34mm; padding:3mm; border:1px dashed #aaa; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; break-inside:avoid; }
-      .name { max-width:100%; margin-bottom:1mm; font-size:11px; font-weight:bold; overflow-wrap:anywhere; }
-      .client,.piece,.code { margin-top:1mm; font-size:8px; color:#333; }
-      svg { max-width:100%; height:auto; }
-      @media screen { body { padding:12px; } .labels { max-width:800px; margin:auto; } }
-    </style></head><body><header class="print-brand"><img src="${brandLogoUrl}" alt="Agencia de Modelos 3D"></header><div class="labels">${labels.map((item,index) => `
-      <div class="label"><div class="name">${escapeText(item.job.data.nombre)}</div>
-      <svg id="production-barcode-${index}"></svg>
-      <div class="client">${escapeText(item.job.data.cliente || 'Producción AM3D')}</div>
-      <div class="piece">Pieza ${item.piece} de ${item.quantity}</div>
-      <div class="code">${escapeText(item.code)}</div></div>`).join('')}</div></body></html>`);
-  popup.document.close();
-  labels.forEach((item,index) => {
-    const svg = popup.document.getElementById('production-barcode-' + index);
+
+  // Hoja SVG vectorial: cada etiqueta mide 70 × 40 mm y se puede editar en Illustrator.
+  const ns = 'http://www.w3.org/2000/svg';
+  const columns = 3, labelWidth = 70, labelHeight = 40;
+  const rows = Math.ceil(labels.length / columns);
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('xmlns', ns);
+  svg.setAttribute('width', (columns * labelWidth) + 'mm');
+  svg.setAttribute('height', (rows * labelHeight) + 'mm');
+  svg.setAttribute('viewBox', `0 0 ${columns * labelWidth} ${rows * labelHeight}`);
+  svg.setAttribute('version', '1.1');
+
+  const addText = (group, x, y, value, size, weight = 'normal') => {
+    const node = document.createElementNS(ns, 'text');
+    node.setAttribute('x', x); node.setAttribute('y', y);
+    node.setAttribute('text-anchor', 'middle');
+    node.setAttribute('font-family', 'Arial, sans-serif');
+    node.setAttribute('font-size', size); node.setAttribute('font-weight', weight);
+    node.textContent = value;
+    group.append(node);
+  };
+
+  labels.forEach((item, index) => {
+    const x = (index % columns) * labelWidth;
+    const y = Math.floor(index / columns) * labelHeight;
+    const group = document.createElementNS(ns, 'g');
+    group.setAttribute('transform', `translate(${x} ${y})`);
+    const border = document.createElementNS(ns, 'rect');
+    border.setAttribute('x', '1'); border.setAttribute('y', '1');
+    border.setAttribute('width', '68'); border.setAttribute('height', '38');
+    border.setAttribute('fill', '#fff'); border.setAttribute('stroke', '#999');
+    border.setAttribute('stroke-dasharray', '1.2 1.2'); border.setAttribute('stroke-width', '.25');
+    group.append(border);
+    addText(group, 35, 7, String(item.job.data.nombre || 'Producto').slice(0, 48), 3.4, 'bold');
+    const barcode = document.createElementNS(ns, 'svg');
+    barcode.setAttribute('x', '6'); barcode.setAttribute('y', '10');
+    barcode.setAttribute('width', '58mm'); barcode.setAttribute('height', '17mm');
+    barcode.setAttribute('viewBox', '0 0 400 100');
+    barcode.setAttribute('preserveAspectRatio', 'none');
+    group.append(barcode);
     try {
-      JsBarcode(svg, item.code, { format:'CODE128', displayValue:true, fontSize:9, height:38, margin:2, width:1.35 });
+      JsBarcode(barcode, item.code, { format: 'CODE128', displayValue: false, margin: 2, height: 70, width: 1.5 });
     } catch (error) {
-      console.error('No se pudo generar la etiqueta de producción:', error);
+      console.error('No se pudo generar el código de barras:', error);
     }
+    addText(group, 35, 32, String(item.job.data.cliente || 'Producción AM3D').slice(0, 48), 2.6);
+    addText(group, 35, 36, `Pieza ${item.piece} de ${item.quantity} · ${item.code}`, 2.5);
+    svg.append(group);
   });
-  popup.focus();
-  popup.setTimeout(() => popup.print(), 250);
+
+  const serialized = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\\n' + serialized], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'etiquetas-produccion-AM3D.svg';
+  document.body.append(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function renderHistory(filters = {}) {
