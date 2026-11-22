@@ -291,602 +291,7 @@ const PRODUCT_TYPES = [
   ['HOG','Hogar y organización'],['PRO','Prototipos'],
 ];
 function nextProductCode(prefix) {
-  const pattern = new RegExp('^AM3D-' + prefix + '-(\\d+)
-function renderCompletedJobs(root, query='') {
-  const completed = appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado')
-    .sort((a,b) => Number(b.createdAt || b.updatedAt || b.data?.fecha || 0) - Number(a.createdAt || a.updatedAt || a.data?.fecha || 0));
-  const q=String(query||'').trim().toLocaleLowerCase('es');
-  const filtered=completed.filter(job=>[job.data?.nombre,job.data?.cliente,getProduct(job.data?.productoId)?.nombre,getProduct(job.data?.productoId)?.codigo].join(' ').toLocaleLowerCase('es').includes(q));
-  if (!filtered.length) {
-    root.innerHTML = '<p class="management-empty">Todavía no hay trabajos realizados. Cuando marques un trabajo como realizado aparecerá aquí automáticamente.</p>';
-    return;
-  }
-  root.innerHTML = filtered.map(job => {
-    const quantity = pieces(job);
-    const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
-    const available = Math.max(0,quantity-sold);
-    const product = getProduct(job.data.productoId);
-    const variants = getProductVariants(product);
-    const selectedCategory = product?.tipo || 'ACC';
-    const prefix = PRODUCT_TYPES.some(([code])=>code===selectedCategory) ? selectedCategory : 'ACC';
-    const assignmentStatus = !product ? ['unassigned','SIN CÓDIGO ASIGNADO'] : job.data.variantId && variants.some(v=>v.id===job.data.variantId) ? ['assigned','CÓDIGO '+(variants.find(v=>v.id===job.data.variantId)?.codigo||'')] : ['partial','PRODUCTO '+product.codigo+' · '+(variants.length?'FALTA VARIANTE':'CÓDIGO ASIGNADO')];
-    const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
-    const soldItems = appState.sales.filter(sale => sale.jobId === job.id);
-    const soldDetail = soldItems.length ? soldItems.map(sale => dateText(sale.fecha)+' · '+(sale.cliente||'Sin cliente')+' · '+(sale.cantidad||1)+' pza · '+money(sale.monto)).join(' | ') : 'Sin ventas registradas';
-    const batches = Array.isArray(job.data.productionBatches) ? job.data.productionBatches : [];
-    return `<article class="production-job-card">
-      <div class="production-job-top">
-        <div class="production-job-identity"><span class="production-job-date">${dateText(job.data.fecha)}</span><h5>${esc(job.data.nombre || 'Trabajo sin nombre')}</h5><p>${esc(job.data.cliente || 'Sin cliente')}</p></div>
-        <span class="production-status production-status-${assignmentStatus[0]}" title="Estado de asignación">${esc(assignmentStatus[1])}</span>
-      </div>
-      <div class="production-job-metrics">
-        <div><small>PRODUCIDAS</small><b>${quantity}</b></div>
-        <div><small>VENDIDAS</small><b>${sold}</b></div>
-        <div><small>DISPONIBLES</small><b>${available}</b></div>
-        <div class="production-job-stock"><div class="production-stock-bar"><i style="width:${quantity ? Math.min(100,sold/quantity*100) : 0}%"></i></div><small>Stock del trabajo</small></div>
-      </div>
-      <div class="production-job-link">
-        <label>Producto<select data-existing-product="${esc(job.id)}">
-          <option value="">Sin clasificar / asignar producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${product?.id===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}
-        </select></label>
-        <label>Variante<select data-existing-variant="${esc(job.id)}" ${!variants.length?'disabled':''}>
-          <option value="">${variants.length?'Sin variante':'Este producto no tiene variantes'}</option>${variants.map(v=>'<option value="'+esc(v.id)+'" '+(job.data.variantId===v.id?'selected':'')+'>'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('')}
-        </select></label>
-        <button type="button" class="management-button production-assign-button" data-assign-existing="${esc(job.id)}">Guardar asignación</button>
-      </div>
-      <div class="production-job-actions">
-        ${available > 0 ? `<button type="button" class="management-button product-quick-sale" data-sell-job="${esc(job.id)}">Vender unidades</button>` : ''}
-        <button type="button" class="management-button secondary" data-production-batch="${esc(job.id)}">+ Registrar reimpresión</button>
-        <details class="production-new-product"><summary>Crear producto nuevo desde este trabajo</summary><div class="production-new-fields">
-          <input data-new-name="${esc(job.id)}" value="${esc(job.data.nombre)}" aria-label="Nombre del producto" placeholder="Nombre del producto">
-          <select data-new-type="${esc(job.id)}" aria-label="Tipo de producto">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}" ${prefix===code?'selected':''}>${label}</option>`).join('')}</select>
-          <input data-new-code="${esc(job.id)}" value="${nextProductCode(prefix)}" aria-label="Código del producto">
-          <button type="button" class="management-button" data-create-assign="${esc(job.id)}">Crear y asignar</button>
-        </div></details>
-      </div>
-      ${batches.length ? '<details class="production-batch-history"><summary>Historial de reimpresiones ('+batches.length+')</summary><ul>'+batches.map(batch=>{const consumed=(batch.materialConsumptions||[]).map(row=>{const material=inventoryState.materials.find(item=>item.id===row.materialId);return esc(material?.nombre||'Material histórico')+' '+Number(row.grams||0).toFixed(1)+' g';}).join(', ')||'Sin consumo detallado';return '<li><b>'+dateText(batch.date)+'</b> · '+Number(batch.producedQuantity||0)+' producidas · '+(batch.variantName?'Variante: '+esc(batch.variantName)+' · ':'')+Number(batch.failedQuantity||0)+' fallidas · '+Number(batch.sellableQuantity||0)+' vendibles · '+(batch.status==='reversed'?'Revertido':'Activo')+'<small>'+consumed+'</small>'+(batch.status==='reversed'?'':' <button type="button" class="management-link danger" data-reverse-production-batch="'+esc(job.id)+'" data-batch-id="'+esc(batch.id)+'">Revertir lote</button>')+'</li>';}).join('')+'</ul></details>' : ''}
-    </article>`;
-  }).join('');
-}
-function printProductBarcode(product, variant = null) {
-  const code = String(variant?.codigo || product?.codigo || '').trim();
-  const labelName = variant ? product.nombre + ' · ' + variant.nombre : product?.nombre;
-  if (!code) { alert('Este registro no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('xmlns', ns); svg.setAttribute('width', '70mm');
-  svg.setAttribute('height', '40mm'); svg.setAttribute('viewBox', '0 0 700 400');
-  svg.setAttribute('version', '1.1');
-  const textNode = (x, y, value, size, weight = 'normal') => {
-    const node = document.createElementNS(ns, 'text');
-    node.setAttribute('x', x); node.setAttribute('y', y);
-    node.setAttribute('text-anchor', 'middle');
-    node.setAttribute('font-family', 'Arial, sans-serif');
-    node.setAttribute('font-size', size); node.setAttribute('font-weight', weight);
-    node.textContent = value; svg.append(node);
-  };
-  const border = document.createElementNS(ns, 'rect');
-  border.setAttribute('x', '5'); border.setAttribute('y', '5');
-  border.setAttribute('width', '690'); border.setAttribute('height', '390');
-  border.setAttribute('fill', '#fff'); border.setAttribute('stroke', '#aaa');
-  border.setAttribute('stroke-dasharray', '8 6'); border.setAttribute('stroke-width', '2');
-  svg.append(border);
-  textNode(350, 75, String(labelName || 'Producto').slice(0, 60), 30, 'bold');
-  const barcode = document.createElementNS(ns, 'svg');
-  barcode.setAttribute('x', '70'); barcode.setAttribute('y', '105');
-  barcode.setAttribute('width', '560'); barcode.setAttribute('height', '190');
-  barcode.setAttribute('viewBox', '0 0 600 200'); barcode.setAttribute('preserveAspectRatio', 'none');
-  svg.append(barcode);
-  try { JsBarcode(barcode, code, { format: 'CODE128', displayValue: false, margin: 2, height: 150, width: 2 }); }
-  catch (error) { alert('No se pudo generar el código de barras: ' + error.message); return; }
-  textNode(350, 340, code, 28, 'bold');
-  textNode(350, 375, 'AM3D · CODE 128 · ' + (variant ? 'VARIANTE' : 'PRODUCTO'), 17);
-  const serialized = new XMLSerializer().serializeToString(svg);
-  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>' + serialized], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url; link.download = 'etiqueta-' + code.replace(/[^a-z0-9_-]/gi, '-') + '.svg';
-  document.body.append(link); link.click(); link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-function renderProductsTable(root, query='') {
- const q=String(query||'').trim().toLocaleLowerCase('es');
- const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q));
- const jobs=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')&&[j.data?.nombre,j.data?.cliente,getProduct(j.data?.productoId)?.nombre,getProduct(j.data?.productoId)?.codigo].join(' ').toLocaleLowerCase('es').includes(q));
- const rows=[];
- products.forEach(p=>{const st=stockFor(p.id),vs=getProductVariants(p);rows.push(`<div class="catalog-unified-row catalog-product-row"><div><span class="catalog-row-kind">PRODUCTO</span><b>${esc(p.nombre)}</b><code>${esc(p.codigo)}</code></div><div><b>${st.available}</b> disponibles<small>${st.produced} producidas · ${st.sold} vendidas</small></div><div class="catalog-row-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div><details><summary>Variantes y códigos (${vs.length})</summary>${vs.map(v=>{const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="catalog-variant-line"><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code> · ${x.available} disponibles <button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('')}<button class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details></div>`);});
- jobs.forEach(j=>{const p=getProduct(j.data?.productoId),variants=getProductVariants(p),variant=variants.find(v=>v.id===j.data?.variantId),qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),status=!p?'SIN PRODUCTO / CÓDIGO':variants.length&&!variant?'FALTA VARIANTE / CÓDIGO': 'ASIGNADO · '+(variant?.codigo||p.codigo);rows.push(`<div class="catalog-unified-row catalog-job-row ${!p?'catalog-job-unassigned':variants.length&&!variant?'catalog-job-partial':'catalog-job-assigned'}"><div><span class="catalog-row-kind">TRABAJO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small><span class="catalog-assignment-state">${esc(status)}</span></div><div class="catalog-quantities"><b>${qty}</b> prod. · <b>${sold}</b> vend. · <b>${available}</b> disp.</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar producto…</option>${appState.products.map(x=>`<option value="${esc(x.id)}" ${p?.id===x.id?'selected':''}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select><select data-existing-variant="${esc(j.id)}" ${!variants.length?'disabled':''}><option value="">Seleccionar variante…</option>${variants.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar código</button></div><div class="catalog-row-actions">${available? `<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button></div><details><summary>Historial: ${appState.sales.filter(x=>x.jobId===j.id).length} ventas · ${(j.data.productionBatches||[]).length} reimpresiones</summary>${appState.sales.filter(x=>x.jobId===j.id).map(x=>`<p>${dateText(x.fecha)} · ${x.cantidad||1} unidades · ${money(x.monto)}</p>`).join('')}${(j.data.productionBatches||[]).map(x=>`<p>${dateText(x.date)} · ${x.producedQuantity} producidas · ${x.sellableQuantity} vendibles · ${x.status==='reversed'?'Revertida':'Activa'} ${x.status==='reversed'?'':`<button class="management-link danger" data-reverse-production-batch="${esc(j.id)}" data-batch-id="${esc(x.id)}">Revertir</button>`}</p>`).join('')}</details></div>`);});
- root.innerHTML=rows.length?`<div class="catalog-table-head"><span>PRODUCTO / TRABAJO</span><span>CANTIDADES Y STOCK</span><span>ASIGNACIÓN / CÓDIGOS</span><span>VENTAS Y PRODUCCIÓN</span></div>${rows.join('')}`:'<p class="management-empty">No hay productos ni trabajos que coincidan.</p>';
-}
-function renderAssignments(root) {
-  if (!appState.jobs.length) { root.innerHTML='<p class="management-empty">Registra primero un trabajo para poder asignarlo.</p>'; return; }
-  root.innerHTML=appState.jobs.map(j=>{
-    const selected=j.data.productoId||'';
-    return `<label class="assignment-row"><span><b>${esc(j.data.nombre)}</b><small>${esc(j.data.cliente||'Sin cliente')} · ${pieces(j)} piezas vendibles</small></span><select data-job-product="${esc(j.id)}"><option value="">Sin producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${selected===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>`;
-  }).join('')+'<button class="management-button" id="save-assignments">Guardar asignaciones</button>';
-}
-function renderClientsTable(root, query='') {
-  const q=query.toLowerCase();
-  const rows=appState.clients.filter(c=>[c.nombre,c.telefono,c.notas,c.tipo].join(' ').toLowerCase().includes(q));
-  if(!rows.length){root.innerHTML='<p class="management-empty">No hay clientes o tiendas que coincidan.</p>';return;}
-  root.innerHTML=`<table class="management-table"><thead><tr><th>Tipo</th><th>Nombre</th><th>Teléfono</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.tipo)}</td><td><b>${esc(c.nombre)}</b><small>${esc(c.notas)}</small></td><td>${esc(c.telefono)}</td><td>${esc(c.contacto)}</td><td>${esc(c.direccion)}</td><td><button class="management-link" data-client-history="${esc(c.id)}">Historial</button> <button class="management-link" data-client-edit="${esc(c.id)}">Editar</button> <button class="management-link danger" data-client-delete="${esc(c.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
-}
-function renderSalesTable(root) {
-  const sales=[...appState.sales].sort((a,b)=>Number(b.fecha||b.createdAt||0)-Number(a.fecha||a.createdAt||0));
-  const total=sales.reduce((sum,sale)=>sum+Number(sale.monto||0),0);
-  const units=sales.reduce((sum,sale)=>sum+Number(sale.cantidad||1),0);
-  const average=sales.length?total/sales.length:0;
-  const summary=root.parentElement.querySelector('#sales-summary');
-  if(summary)summary.innerHTML=`<div><span>OPERACIONES</span><b>${sales.length}</b></div><div><span>UNIDADES VENDIDAS</span><b>${units}</b></div><div><span>INGRESOS REGISTRADOS</span><b>${money(total)}</b></div><div><span>VENTA PROMEDIO</span><b>${money(average)}</b></div>`;
-  if(!sales.length){root.innerHTML='<p class="management-empty">Todavía no hay ventas registradas.</p>';return;}
-  root.innerHTML=`<table class="management-table sales-detail-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Trabajo</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th>Pago</th><th>Vendido por</th><th>Notas</th><th></th></tr></thead><tbody>${sales.map(s=>{
-    const qty=Number(s.cantidad||1), unit=qty?Number(s.monto||0)/qty:0;
-    return `<tr><td>${dateText(s.fecha)}</td><td><b>${esc(s.cliente||'Sin cliente')}</b></td><td>${esc(s.productoNombre||'Sin producto asociado')}</td><td>${esc(s.jobNombre||'Venta independiente')}</td><td><b>${qty}</b></td><td>${money(unit)}</td><td class="sales-total">${money(s.monto)}</td><td><span class="sales-payment">${esc(s.metodoPago||'No especificado')}</span></td><td>${esc(s.vendidoPor||'—')}</td><td class="sales-notes" title="${esc(s.notas||'Sin notas')}">${esc(s.notas||'—')}</td><td><button class="management-link danger" data-sale-delete="${esc(s.id)}">Eliminar</button></td></tr>`;
-  }).join('')}</tbody></table>`;
-}
-function renderConsignments(root) {
-  if(!appState.consignments.length){root.innerHTML='<p class="management-empty">Todavía no hay entregas registradas.</p>';return;}
-  root.innerHTML=`<table class="management-table"><thead><tr><th>Fecha</th><th>Tienda</th><th>Producto</th><th>Entregado</th><th>Devuelto</th><th>A cobrar</th><th>Pagado</th><th></th></tr></thead><tbody>${[...appState.consignments].sort((a,b)=>b.fecha-a.fecha).map(c=>{
-    const balance=consignmentBalance(c);
-    return `<tr><td>${dateText(c.fecha)}</td><td><b>${esc(c.tienda)}</b></td><td>${esc(c.productoNombre)}</td><td>${c.cantidad}</td><td>${c.cantidadDevuelta||0}</td><td>${money(balance.due)}</td><td>${money(balance.paid)}${balance.credit>0?`<small>Saldo a favor: ${money(balance.credit)}</small>`:''}</td><td><button class="management-link" data-cons-pay="${esc(c.id)}">Pago</button> <button class="management-link" data-cons-return="${esc(c.id)}">Devolución</button> <button class="management-link danger" data-cons-delete="${esc(c.id)}">Eliminar</button></td></tr>`;
-  }).join('')}</tbody></table>`;
-}
-function renderConsignmentSummary(root) {
-  const map=new Map();
-  appState.consignments.forEach(c=>{const n=Math.max(0,c.cantidad-(c.cantidadDevuelta||0));const balance=consignmentBalance(c);const row=map.get(c.tienda)||{pieces:0,pending:0,credit:0};row.pieces+=n;row.pending+=balance.pending;row.credit+=balance.credit;map.set(c.tienda,row);});
-  root.innerHTML=map.size?[...map].map(([name,r])=>`<div class="summary-row"><b>${esc(name)}</b><span>${r.pieces} piezas · pendiente ${money(r.pending)}${r.credit>0?' · saldo a favor '+money(r.credit):''}</span></div>`).join(''):'<p class="management-empty">Sin entregas aún.</p>';
-}
-
-function attachBackup(root) {
-  root.querySelector('#backup-export').addEventListener('click',exportBackup);
-  root.querySelector('#backup-import').addEventListener('change',async e=>{
-    const file=e.target.files?.[0]; if(!file)return;
-    if(!confirm('La importación reemplazará todos los datos actuales de Agencia de Modelos 3D en Firebase. ¿Continuar?')){e.target.value='';return;}
-    try{await importBackup(file);notify('Respaldo importado correctamente.');renderManagementView(root,active);}catch(error){alert(error.message);}
-  });
-}
-function attachProducts(root) {
-  root.querySelector('#catalog-add-product').addEventListener('click',async()=>{
-    const typeText=prompt('Tipo de producto (DEC, FUN, REP, PER, MIN, ACC, HOG o PRO):','ACC');
-    if(typeText===null)return;
-    const type=String(typeText).trim().toUpperCase();
-    if(!PRODUCT_TYPES.some(([value])=>value===type)){alert('Selecciona un tipo válido de la lista.');return;}
-    const nameText=prompt('Nombre del producto:');
-    if(nameText===null)return;
-    const name=String(nameText).trim();
-    if(!name){alert('El nombre del producto es obligatorio.');return;}
-    const code=nextProductCode(type);
-    if(!confirm('Se generará el código '+code+'. ¿Crear el producto?'))return;
-    if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código generado ya existe. Vuelve a intentarlo.');return;}
-    const product={id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()};
-    appState.products.push(product);
-    try{
-      const persisted=await saveAppState();
-      if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-      renderManagementView(root,'products');notify('Producto creado con el código '+code+'.');
-    }catch(error){
-      appState.products=appState.products.filter(item=>item.id!==product.id);
-      alert('No se pudo crear el producto: '+error.message);
-      renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
-    }
-  });
-  /* El alta se realiza desde el botón compacto; no hay formulario fijo en pantalla. */
-  const form=null;
-  if(form)form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
-    if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
-    if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
-    if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
-    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
-    saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
-  });
-  root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
-  root.querySelector('#products-table').addEventListener('click',e=>{
-    const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
-    const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
-    if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
-    if(variantBarcode){const product=getProduct(variantBarcode.dataset.variantBarcode);const variant=getProductVariants(product).find(item=>item.id===variantBarcode.dataset.variantId);if(product&&variant)printProductBarcode(product,variant);}
-    if(addVariant){
-      const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
-      const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
-      const suggestedCode=nextVariantCode(product,name);const code=prompt('Código/SKU único de esta variante:',suggestedCode);if(code===null)return;
-      try{
-        const values=validateVariantInput({code,name},appState.products);
-        if(!Array.isArray(product.variantes))product.variantes=[];
-        product.variantes.push({id:makeId('var'),...values,activo:true,createdAt:Date.now()});
-        saveAppState();renderManagementView(root,'products');notify('Variante guardada. Ya puedes imprimir su etiqueta individual.');
-      }catch(error){alert(error.message);}
-      return;
-    }
-    if(edit){const p=getProduct(edit.dataset.productEdit);if(!p)return;const name=prompt('Nombre del producto:',p.nombre);if(name===null)return;const code=prompt('Código del producto:',p.codigo);if(code===null)return;const type=prompt('Tipo del producto:',p.tipo||'ACC');if(type===null)return;if(!name.trim()||!code.trim()||!PRODUCT_TYPES.some(([x])=>x===type.trim().toUpperCase())){alert('Datos de producto no válidos.');return;}if(!isProductCodeAvailable(code.trim(),appState.products,{productId:p.id,kind:'product'})){alert('Ese código ya está utilizado.');return;}Object.assign(p,{nombre:name.trim(),codigo:code.trim(),tipo:type.trim().toUpperCase()});saveAppState();renderManagementView(root,'products');notify('Producto actualizado.');}
-    if(del){const id=del.dataset.productDelete;
-      const hasSales=appState.sales.some(s=>s.productoId===id);
-      const hasConsignments=appState.consignments.some(c=>c.productoId===id);
-      const hasJobs=appState.jobs.some(j=>j.data?.productoId===id);
-      if(hasSales||hasConsignments||hasJobs){alert('No se puede eliminar este producto porque tiene historial comercial o trabajos vinculados. Para conservar la trazabilidad, mantenlo en el catálogo; más adelante se podrá marcar como inactivo.');return;}
-      if(!confirm('¿Eliminar este producto sin movimientos ni trabajos asociados?'))return;
-      appState.products=appState.products.filter(p=>p.id!==id);saveAppState();renderManagementView(root,'products');notify('Producto eliminado.');}
-  });
-  root.querySelector('#products-table').addEventListener('change',e=>{
-    const productSelect=e.target.closest('[data-existing-product]');
-    if(productSelect){const jobId=productSelect.dataset.existingProduct;const product=getProduct(productSelect.value);const variantSelect=root.querySelector('[data-existing-variant="'+jobId+'"]');if(variantSelect){variantSelect.innerHTML='<option value="">Sin variante</option>'+getProductVariants(product).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');}return;}
-    const type=e.target.closest('[data-new-type]');
-    if(type){
-      const codeField=root.querySelector('[data-new-code="'+type.dataset.newType+'"]');
-      if(codeField)codeField.value=nextProductCode(type.value);
-    }
-  });
-  root.querySelector('#products-table').addEventListener('click',async e=>{
-    const reverseButton=e.target.closest('[data-reverse-production-batch]');
-    if(reverseButton){
-      const job=getJob(reverseButton.dataset.reverseProductionBatch);
-      const batch=job?.data?.productionBatches?.find(item=>item.id===reverseButton.dataset.batchId);
-      if(!job||!batch){alert('No se encontró el trabajo o lote.');return;}
-      if(batch.status==='reversed'){alert('Este lote ya está revertido.');return;}
-      let quantity;
-      try{
-        ({quantity}=assertProductionBatchCanReverse(job,batch,appState.jobs,appState.sales,appState.consignments));
-      }catch(error){alert('No se puede revertir: '+error.message);return;}
-      const reason=prompt('Motivo de la reversión del lote:');
-      if(reason===null)return;
-      const reversalId=makeId('reversion-lote');
-      const previousJobData=JSON.parse(JSON.stringify(job.data));
-      const previousProducts=JSON.parse(JSON.stringify(appState.products));
-      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
-      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
-      reverseButton.disabled=true;
-      try{
-        const event=reverseProductionBatch(batch,reason,reversalId);
-        reverseProductionBatchMaterials(batch,reversalId);
-        if(!Array.isArray(job.data.productionBatchReversals))job.data.productionBatchReversals=[];
-        job.data.productionBatchReversals.push(event);
-        batch.status='reversed';
-        batch.reversedAt=event.date;
-        batch.reversalId=reversalId;
-        job.updatedAt=Date.now();
-        const persisted=await saveAppState();
-        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
-        renderManagementView(root,'products');
-        notify('Lote revertido y guardado en Firestore.');
-      }catch(error){
-        job.data=previousJobData;
-        appState.products.splice(0,appState.products.length,...previousProducts);
-        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
-        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
-        alert('No se pudo completar la reversión: '+error.message);
-        renderManagementView(root,'products');
-      }
-      return;
-    }
-    const batchButton=e.target.closest('[data-production-batch]');
-    if(batchButton){
-      const job=getJob(batchButton.dataset.productionBatch);
-      if(!job?.data){alert('No se encontró el trabajo.');return;}
-      let produced=1, failed=0, consumptions, batchOptions;
-      try {
-        consumptions=getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced);
-        if(!consumptions.length) throw new Error('No se encontró una receta de materiales para este trabajo. No se puede registrar la reimpresión sin un consumo verificable.');
-        const missing=consumptions.filter(row=>!inventoryState.materials.some(material=>material.id===row.materialId));
-        if(missing.length) throw new Error('El trabajo original contiene un material que ya no está en el inventario. Revisa el registro antes de reimprimir.');
-
-        batchOptions=await requestProductionBatchOptions(job,consumptions);
-        if(!batchOptions)return;
-        produced=batchOptions.produced;
-        failed=batchOptions.failed;
-        consumptions=batchOptions.consumptions.map(row=>({...row,grams:Number((row.grams*produced).toFixed(3))}));
-        const combined=new Map();
-        for(const row of consumptions) combined.set(row.materialId,(combined.get(row.materialId)||0)+row.grams);
-        const insufficient=[...combined].map(([id,grams])=>({grams,material:inventoryState.materials.find(item=>item.id===id)}))
-          .filter(({grams,material})=>!material||Number(material.stock||0)+1e-9<grams);
-        if(insufficient.length) throw new Error('Stock insuficiente para la reimpresión: '+insufficient.map(({grams,material})=>(material?.nombre||'Material')+' requiere '+grams.toFixed(1)+' g y tiene '+Number(material?.stock||0).toFixed(1)+' g').join('; '));
-        consumptions=[...combined].map(([materialId,grams])=>({materialId,grams}));
-      } catch(error) { alert(error.message); return; }
-      const previousJobData=JSON.parse(JSON.stringify(job.data));
-      const previousProducts=JSON.parse(JSON.stringify(appState.products));
-      const previousMaterials=JSON.parse(JSON.stringify(inventoryState.materials));
-      const previousMovements=JSON.parse(JSON.stringify(inventoryState.jobMovements));
-      batchButton.disabled=true;
-      try{
-        if(!Array.isArray(job.data.productionBatches))job.data.productionBatches=[];
-        const changedMaterials=consumptions.some((row,index)=>row.materialId!==getProductionBatchMaterialConsumptions(job,inventoryState.jobMovements,produced)[index]?.materialId);
-        const product=getProduct(job.data.productoId);
-        const variant=changedMaterials&&product?createVariantForBatch(product,consumptions.map(row=>row.materialId)):null;
-        const batch=createProductionBatch(job,{id:makeId('lote'),date:Date.now(),producedQuantity:produced,failedQuantity:failed,materialConsumptions:consumptions,variantId:variant?.id||job.data.variantId||null,variantName:variant?.nombre||null},job.data.productionBatches);
-        applyProductionBatchMaterials(job,batch);
-        job.data.productionBatches.push(batch);
-        job.updatedAt=Date.now();
-        const persisted=await saveAppState();
-        if(!persisted) throw new Error('Firestore no confirmó el guardado. Se restauraron los datos de esta operación en pantalla.');
-        renderManagementView(root,'products');
-        notify('Reimpresión registrada y guardada: '+batch.sellableQuantity+' piezas vendibles.');
-      }catch(error){
-        job.data=previousJobData;
-        appState.products.splice(0,appState.products.length,...previousProducts);
-        inventoryState.materials.splice(0,inventoryState.materials.length,...previousMaterials);
-        inventoryState.jobMovements.splice(0,inventoryState.jobMovements.length,...previousMovements);
-        alert('No se pudo registrar la reimpresión: '+error.message);
-        renderManagementView(root,'products');
-      }
-      return;
-    }
-    const sellJob=e.target.closest('[data-sell-job]');
-    const assign=e.target.closest('[data-assign-existing]');
-    const create=e.target.closest('[data-create-assign]');
-    if(create){
-      const job=getJob(create.dataset.createAssign);
-      const nameField=root.querySelector('[data-new-name="'+create.dataset.createAssign+'"]');
-      const typeField=root.querySelector('[data-new-type="'+create.dataset.createAssign+'"]');
-      const codeField=root.querySelector('[data-new-code="'+create.dataset.createAssign+'"]');
-      const name=String(nameField?.value||'').trim();
-      const type=String(typeField?.value||'').trim().toUpperCase();
-      const code=String(codeField?.value||'').trim();
-      if(!job?.data){alert('No se encontró el trabajo que deseas asignar.');return;}
-      if(!name||!code||!PRODUCT_TYPES.some(([value])=>value===type)){alert('Completa un nombre, tipo y código válido.');return;}
-      if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código '+code+' ya está utilizado. Cambia el código o selecciona otro tipo.');return;}
-      const previousProductId=job.data.productoId??null;
-      const previousVariantId=job.data.variantId??null;
-      const product={id:makeId('prod'),codigo:code,tipo:type,nombre,notas:'',createdAt:Date.now()};
-      create.disabled=true;
-      appState.products.push(product);
-      job.data.productoId=product.id;
-      job.data.variantId=null;
-      job.updatedAt=Date.now();
-      try{
-        const persisted=await saveAppState();
-        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-        renderManagementView(root,'products');
-        notify('Producto creado y trabajo asignado con el código '+code+'.');
-      }catch(error){
-        appState.products=appState.products.filter(item=>item.id!==product.id);
-        job.data.productoId=previousProductId;
-        job.data.variantId=previousVariantId;
-        alert('No se pudo crear y asignar el producto: '+error.message);
-        renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
-      }
-      return;
-    }
-    if(sellJob){
-      const job=getJob(sellJob.dataset.sellJob),product=getProduct(job?.data?.productoId);
-      if(!job||!product){alert('Primero asigna este trabajo a un producto del catálogo.');return;}
-      const variants=getProductVariants(product),variant=variants.find(v=>v.id===job.data?.variantId);
-      if(variants.length&&!variant){alert('Selecciona y guarda la variante/código antes de vender.');return;}
-      const qtyText=prompt('Cantidad a vender. Disponibles: '+Math.max(0,pieces(job)-appState.sales.filter(x=>x.jobId===job.id).reduce((n,x)=>n+Number(x.cantidad||1),0)),'1');
-      if(qtyText===null)return;const qty=Number(qtyText);
-      if(!Number.isSafeInteger(qty)||qty<1){alert('Ingresa una cantidad entera válida.');return;}
-      const unit=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
-      const amountText=prompt('Monto total de la venta (Bs):',String((unit*qty).toFixed(2)));
-      if(amountText===null)return;const amount=Number(amountText);
-      if(!Number.isFinite(amount)||amount<=0){alert('Ingresa un monto válido.');return;}
-      const client=prompt('Cliente (opcional):','')??'';
-      try{assertJobCanSell(job,qty,appState.sales);if(variant)assertJobVariantCanSell(job,variant.id,qty,appState.sales);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}
-      const sale={id:makeId('venta'),clientId:findClientByName(client)?.id||null,jobId:job.id,jobNombre:job.data.nombre||'',productoId:product.id,variantId:variant?.id||null,productoNombre:product.nombre,cliente:client.trim(),cantidad:qty,monto:amount,fecha:Date.now(),metodoPago:'No especificado',vendidoPor:'',notas:'',createdAt:Date.now()};
-      appState.sales.push(sale);sellJob.disabled=true;
-      try{const persisted=await saveAppState();if(!persisted)throw new Error('Firestore no confirmó el registro.');renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search').value);notify('Venta registrada en el catálogo.');}
-      catch(error){appState.sales=appState.sales.filter(item=>item.id!==sale.id);alert('No se pudo guardar la venta: '+error.message);renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search').value);}
-      return;
-    }
-    if(assign){
-      const job=getJob(assign.dataset.assignExisting);
-      const select=root.querySelector('[data-existing-product="'+assign.dataset.assignExisting+'"]');
-      const productId=String(select?.value||'');
-      const product=appState.products.find(item=>item.id===productId);
-      if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
-      const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');
-      const variantId=String(variantSelect?.value||'');
-      if(variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante no pertenece al producto seleccionado.');return;}
-      const previousProductId=job.data.productoId??null;
-      const previousVariantId=job.data.variantId??null;
-      assign.disabled=true;
-      try{
-        job.data.productoId=product.id;
-        job.data.variantId=variantId||null;
-        job.updatedAt=Date.now();
-        const persisted=await saveAppState();
-        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-        renderProductsTable(root.querySelector('#products-table'));
-        
-        notify('Trabajo asignado y guardado en Firebase.');
-      }catch(error){
-        job.data.productoId=previousProductId;
-        job.data.variantId=previousVariantId;
-        alert('No se pudo guardar la asignación: '+error.message);
-        renderProductsTable(root.querySelector('#products-table'));
-      }
-    }
-
-  });
-}
-function attachClients(root) {
-  const form=root.querySelector('#client-form');
-  form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const name=d.nombre.trim();
-    if(appState.clients.some(c=>c.nombre.toLowerCase()===name.toLowerCase()&&c.id!==d.id)){if(!confirm('Ya existe un registro con ese nombre. ¿Guardar igualmente?'))return;}
-    const data={tipo:d.tipo,nombre:name,telefono:d.telefono.trim(),contacto:d.contacto.trim(),direccion:d.direccion.trim(),notas:d.notas.trim()};
-    if(d.id)Object.assign(appState.clients.find(c=>c.id===d.id),data);else appState.clients.push({id:makeId('cli'),...data,createdAt:Date.now()});
-    saveAppState();renderManagementView(root,'clients');notify('Registro guardado.');
-  });
-  root.querySelector('#client-search').addEventListener('input',e=>renderClientsTable(root.querySelector('#clients-table'),e.target.value));
-  root.querySelector('#clients-table').addEventListener('click',e=>{
-    const history=e.target.closest('[data-client-history]'),edit=e.target.closest('[data-client-edit]'),del=e.target.closest('[data-client-delete]');
-    if(history){const client=appState.clients.find(x=>x.id===history.dataset.clientHistory);if(!client)return;const jobs=appState.jobs.filter(x=>x.data?.clientId===client.id);const sales=appState.sales.filter(x=>x.clientId===client.id);const consignments=appState.consignments.filter(x=>x.clientId===client.id);const total=sales.reduce((n,x)=>n+Number(x.monto||0),0);const panel=root.querySelector('#client-history');panel.hidden=false;panel.innerHTML=`<h3>Historial de ${esc(client.nombre)}</h3><div class="client-history-stats"><span>${jobs.length} trabajos</span><span>${sales.length} ventas · ${money(total)}</span><span>${consignments.length} consignaciones</span></div><ul>${jobs.map(x=>`<li>Trabajo: ${esc(x.data.nombre)} · ${dateText(x.data.fecha)}</li>`).concat(sales.map(x=>`<li>Venta: ${esc(x.productoNombre||x.jobNombre||'Venta')} · ${money(x.monto)} · ${dateText(x.fecha)}</li>`),consignments.map(x=>`<li>Consignación: ${esc(x.productoNombre)} · ${x.cantidad} unidades · ${dateText(x.fecha)}</li>`)).join('')||'<li>Sin movimientos vinculados.</li>'}</ul>`;return;}
-    if(edit){const c=appState.clients.find(x=>x.id===edit.dataset.clientEdit);Object.entries(c).forEach(([k,v])=>{if(form.elements[k])form.elements[k].value=v??'';});root.querySelector('#client-form-title').textContent='Editar registro';}
-    if(del){if(!confirm('¿Eliminar este registro? Las ventas y consignaciones existentes se conservan.'))return;appState.clients=appState.clients.filter(c=>c.id!==del.dataset.clientDelete);saveAppState();renderManagementView(root,'clients');notify('Registro eliminado.');}
-  });
-}
-function attachSales(root) {
-  const form=root.querySelector('#sale-form'), jobSel=form.elements.jobId, prodSel=form.elements.productoId, variantSel=form.elements.variantId;
-  const refreshSaleVariants=()=>{const p=getProduct(prodSel.value);const variants=getProductVariants(p);variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');variantSel.required=variants.length>0;};
-  prodSel.addEventListener('change',refreshSaleVariants);refreshSaleVariants();
-  function updatePrice(){
-    const job=getJob(jobSel.value);if(!job)return;
-    const amount=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
-    if(!form.elements.monto.value)form.elements.monto.value=(amount*Number(form.elements.cantidad.value||1)).toFixed(2);
-    root.querySelector('#sale-stock-help').textContent=`Piezas vendibles del trabajo: ${pieces(job)}. Ventas ya registradas: ${appState.sales.filter(s=>s.jobId===job.id).reduce((n,s)=>n+Number(s.cantidad||1),0)}.`;
-  }
-  jobSel.addEventListener('change',updatePrice);form.elements.cantidad.addEventListener('input',updatePrice);
-  form.addEventListener('submit',async e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const qty=Math.floor(Number(d.cantidad)), amount=Number(d.monto);
-    if(!Number.isInteger(qty)||qty<1||!Number.isFinite(amount)||amount<=0){alert('Cantidad o monto no válido.');return;}
-    const job=getJob(d.jobId);
-    const product=getProduct(d.productoId);
-    if(job){
-      try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}
-      if(!product||job.data.productoId!==product.id){alert('El trabajo seleccionado debe estar asignado al producto elegido.');return;}
-    }
-    const variantId=String(d.variantId||'');
-    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
-    if(product&&variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante seleccionada no pertenece al producto.');return;}
-    if(job&&variantId){
-      try{
-        assertJobVariantCanSell(job,variantId,qty,appState.sales);
-        assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);
-      }catch(error){alert(error.message);return;}
-    } else if(job&&!variantId&&job.data?.variantId){
-      alert('Este trabajo está clasificado en una variante. Selecciona esa variante para registrar la venta.');return;
-    } else if(product){
-      try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}
-    }
-    const linkedClient=findClientByName(d.cliente);
-    const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
-    appState.sales.push(sale);
-    try{
-      const persisted=await saveAppState();
-      if(!persisted)throw new Error('Firestore no confirmó el registro.');
-      pendingSaleProductId=null;pendingSaleJobId=null;
-      renderManagementView(root,'sales');notify('Venta registrada y guardada en Firebase.');
-    }catch(error){
-      appState.sales=appState.sales.filter(item=>item.id!==sale.id);
-      alert('No se pudo guardar la venta: '+error.message);
-    }
-  });
-  if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
-    const job=getJob(pendingSaleJobId);
-    jobSel.value=pendingSaleJobId;
-    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]')){prodSel.value=job.data.productoId;refreshSaleVariants();if(job.data.variantId)variantSel.value=job.data.variantId;}
-    const unit=Number(job?.calc?.precioUnitario||job?.calc?.precioVenta||0);
-    if(unit>0)form.elements.monto.value=unit.toFixed(2);
-    updatePrice();
-    root.querySelector('#sale-stock-help').textContent=`Venta de ${job?.data?.nombre||'trabajo'} · ${pieces(job)} piezas vendibles.`;
-    pendingSaleJobId=null;
-  } else if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);const latestJob=jobIdsFor(pendingSaleProductId).sort((a,b)=>Number(b.createdAt||b.data?.fecha||0)-Number(a.createdAt||a.data?.fecha||0))[0];const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles. Ajusta el monto según la cantidad y el precio acordado.';}
-  root.querySelector('#sales-table').addEventListener('click',e=>{
-    const del=e.target.closest('[data-sale-delete]');if(!del)return;
-    if(!confirm('¿Eliminar esta venta? Las piezas volverán a estar disponibles.'))return;
-    appState.sales=appState.sales.filter(s=>s.id!==del.dataset.saleDelete);saveAppState();renderManagementView(root,'sales');notify('Venta eliminada.');
-  });
-  root.querySelector('#sales-print').addEventListener('click',()=>window.print());
-  root.querySelector('#sales-csv').addEventListener('click',()=>downloadCsv('ventas.csv',['Fecha','Cliente','Producto','Trabajo','Cantidad','Precio unitario','Monto','Método de pago','Vendido por','Notas'],appState.sales.map(s=>[dateText(s.fecha),s.cliente,s.productoNombre,s.jobNombre,s.cantidad,Number(s.monto||0)/Number(s.cantidad||1),s.monto,s.metodoPago,s.vendidoPor,s.notas])));
-}
-function attachConsignments(root) {
-  const form=root.querySelector('#consignment-form'), productSel=form.elements.productoId, variantSel=form.elements.variantId;
-  const refreshConsignmentVariants=()=>{const p=getProduct(productSel.value);const variants=getProductVariants(p);variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');variantSel.required=variants.length>0;};
-  productSel.addEventListener('change',refreshConsignmentVariants);refreshConsignmentVariants();
-  productSel.addEventListener('change',()=>{const p=getProduct(productSel.value);if(p)form.elements.productoLibre.value=p.codigo+' — '+p.nombre;});
-  form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const product=getProduct(d.productoId);
-    let qty;
-    try{qty=positiveInteger(d.cantidad);}catch(error){alert(error.message);return;}
-    const price=Number(d.precioUnitario),paid=Number(d.montoPagado);
-    if(!d.tienda.trim()||(!product&&!d.productoLibre.trim())||!Number.isFinite(price)||price<=0||!Number.isFinite(paid)||paid<0||paid>qty*price){alert('Completa tienda, producto, cantidad y valores de pago válidos.');return;}
-    const variantId=String(d.variantId||'');
-    if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para consignar.');return;}
-    if(product){try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}}
-    const consignmentDate=d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now();
-    const linkedStore=findClientByName(d.tienda,'Tienda');appState.consignments.push({id:makeId('consig'),clientId:linkedStore?.id||null,tienda:d.tienda.trim(),contacto:d.contacto.trim(),productoId:product?.id||null,variantId:variantId||null,productoNombre:product?product.codigo+' — '+product.nombre:d.productoLibre.trim(),cantidad:qty,cantidadDevuelta:0,precioUnitario:price,valorTotal:qty*price,estadoPago:paid===0?'Pendiente':paid===qty*price?'Pagado':'Parcial',montoPagado:paid,pagos:paid>0?[{monto:paid,fecha:consignmentDate,metodoPago:'No especificado'}]:[],fecha:consignmentDate,notas:d.notas.trim(),createdAt:Date.now()});
-    saveAppState();renderManagementView(root,'consignments');notify('Entrega registrada.');
-  });
-  root.querySelector('#consignments-table').addEventListener('click',e=>{
-    const pay=e.target.closest('[data-cons-pay]'),ret=e.target.closest('[data-cons-return]'),del=e.target.closest('[data-cons-delete]');
-    const c=appState.consignments.find(x=>x.id===(pay?.dataset.consPay||ret?.dataset.consReturn||del?.dataset.consDelete));if(!c)return;
-    if(pay){const balance=consignmentBalance(c);const value=prompt(`¿Cuánto pagó ahora? Saldo pendiente: ${money(balance.pending)}`,'');if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<=0||amount>balance.pending){alert('El pago debe ser mayor a cero y no superar el saldo pendiente.');return;}if(!Array.isArray(c.pagos))c.pagos=[];c.pagos.push({monto:amount,fecha:Date.now(),metodoPago:'No especificado'});c.montoPagado=Number(c.montoPagado||0)+amount;c.estadoPago=c.montoPagado>=balance.due?'Pagado':'Parcial';}
-    if(ret){const left=Math.max(0,c.cantidad-c.cantidadDevuelta);const value=prompt(`Cantidad devuelta sin vender (máximo ${left}):`,'1');if(value===null)return;const amount=Math.floor(Number(value));if(!Number.isInteger(amount)||amount<1||amount>left){alert('Cantidad devuelta no válida.');return;}c.cantidadDevuelta+=amount;const balance=consignmentBalance(c);c.estadoPago=c.montoPagado<=0?'Pendiente':c.montoPagado>=balance.due?'Pagado':'Parcial';}
-    if(del){if(c.montoPagado>0&&!confirm('Esta consignación tiene pagos registrados. Al eliminarla se perderá ese historial de cobro. ¿Continuar?'))return;if(!c.montoPagado&&!confirm('¿Eliminar la consignación? Las piezas volverán a estar disponibles.'))return;appState.consignments=appState.consignments.filter(x=>x.id!==c.id);}
-    saveAppState();renderManagementView(root,'consignments');notify('Consignación actualizada.');
-  });
-  renderConsignmentSummary(root.querySelector('#consignment-summary'));
-  root.querySelector('#cons-print').addEventListener('click',()=>window.print());
-}
-function downloadCsv(filename,headers,rows) {
-  const cell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const csv='\uFEFF'+[headers,...rows].map(row=>row.map(cell).join(';')).join('\r\n');
-  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
-}
-
-export 
-function finance() {
-  const today=dateValue();
-  return `<div class="finance-toolbar management-card">
-    <div><h3>Período de análisis</h3><p class="management-help">Los ingresos se calculan con ventas registradas y pagos efectivamente recibidos de consignaciones.</p></div>
-    <div class="finance-filters"><label class="management-field">Desde<input type="date" id="finance-from" value="${today.slice(0,7)}-01"></label><label class="management-field">Hasta<input type="date" id="finance-to" value="${today}"></label></div>
-  </div>
-  <div id="finance-summary" class="management-stats"></div>
-  <div class="management-grid">
-    <form class="management-card" id="expense-form"><h3>Registrar egreso</h3>
-      <label class="management-field">Concepto<input name="concepto" required placeholder="Ej. electricidad del taller"></label>
-      <label class="management-field">Categoría<select name="categoria"><option>Electricidad</option><option>Materiales e insumos</option><option>Mantenimiento</option><option>Herramientas y equipos</option><option>Alquiler</option><option>Transporte</option><option>Servicios</option><option>Otros</option></select></label>
-      <div class="management-form-row"><label class="management-field">Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required></label><label class="management-field">Fecha<input name="fecha" type="date" value="${today}" required></label></div>
-      <label class="management-field">Método de pago<select name="metodoPago"><option>Efectivo</option><option>QR</option><option>Transferencia</option><option>Tarjeta</option><option>Otro</option></select></label>
-      <label class="management-field">Notas<textarea name="notas" rows="2"></textarea></label>
-      <button class="management-button" type="submit">Guardar egreso</button>
-    </form>
-    <div class="management-card"><h3>Ingresos y egresos por categoría</h3><div id="finance-breakdown"></div></div>
-  </div>
-  <div class="management-card"><h3>Movimientos del período</h3><div class="management-table-wrap" id="finance-table"></div><div class="management-actions"><button class="management-button secondary" id="finance-csv">Exportar CSV</button></div></div>`;
-}
-function financeMovements(from,to) {
-  const start=new Date(from+'T00:00:00').getTime(), end=new Date(to+'T23:59:59').getTime();
-  const inRange=value=>{const t=typeof value==='number'?value:new Date(value+'T12:00:00').getTime();return Number.isFinite(t)&&t>=start&&t<=end;};
-  const rows=[];
-  appState.sales.forEach(s=>{if(inRange(s.fecha))rows.push({id:s.id,fecha:s.fecha,tipo:'Ingreso',categoria:'Venta',concepto:'Venta · '+(s.cliente||s.jobNombre||'Sin cliente'),metodo:s.metodoPago||'—',monto:Number(s.monto||0)});});
-  appState.consignments.forEach(c=>{
-    const payments=Array.isArray(c.pagos)?c.pagos:[];
-    payments.forEach((p,i)=>{if(inRange(p.fecha))rows.push({id:c.id+'_p'+i,fecha:p.fecha,tipo:'Ingreso',categoria:'Consignación',concepto:'Pago · '+(c.tienda||'Tienda')+' · '+(c.productoNombre||''),metodo:p.metodoPago||'—',monto:Number(p.monto||0)});});
-
-  });
-  appState.expenses.forEach(x=>{if(inRange(x.fecha))rows.push({id:x.id,fecha:x.fecha,tipo:'Egreso',categoria:x.categoria||'Otros',concepto:x.concepto,metodo:x.metodoPago||'—',monto:Number(x.monto||0)});});
-  return rows.sort((a,b)=>Number(b.fecha)-Number(a.fecha));
-}
-function attachFinance(root) {
-  const from=root.querySelector('#finance-from'),to=root.querySelector('#finance-to');
-  function refresh(){
-    if(from.value>to.value){root.querySelector('#finance-summary').innerHTML='<p class="management-help">La fecha inicial no puede ser posterior a la fecha final.</p>';return;}
-    const rows=financeMovements(from.value,to.value);
-    const income=rows.filter(x=>x.tipo==='Ingreso').reduce((n,x)=>n+x.monto,0);
-    const expense=rows.filter(x=>x.tipo==='Egreso').reduce((n,x)=>n+x.monto,0);
-    const sales=rows.filter(x=>x.categoria==='Venta').reduce((n,x)=>n+x.monto,0);
-    const cons=rows.filter(x=>x.categoria==='Consignación').reduce((n,x)=>n+x.monto,0);
-    root.querySelector('#finance-summary').innerHTML=`<article><span>INGRESOS COBRADOS</span><strong>${money(income)}</strong></article><article><span>EGRESOS</span><strong>${money(expense)}</strong></article><article><span>SALDO NETO</span><strong class="${income-expense>=0?'finance-positive':'finance-negative'}">${money(income-expense)}</strong></article><article><span>VENTAS / CONSIGNACIONES</span><strong>${money(sales)} / ${money(cons)}</strong></article>`;
-    const categories=new Map();rows.filter(x=>x.tipo==='Egreso').forEach(x=>categories.set(x.categoria,(categories.get(x.categoria)||0)+x.monto));
-    root.querySelector('#finance-breakdown').innerHTML=categories.size?[...categories].sort((a,b)=>b[1]-a[1]).map(([name,value])=>`<div class="summary-row"><b>${esc(name)}</b><span>${money(value)}</span></div>`).join(''):'<p class="management-empty">No hay egresos en este período.</p>';
-    root.querySelector('#finance-table').innerHTML=rows.length?`<table class="management-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Concepto</th><th>Método</th><th>Monto</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td>${dateText(x.fecha)}</td><td><b class="${x.tipo==='Ingreso'?'finance-positive':'finance-negative'}">${x.tipo}</b></td><td>${esc(x.categoria)}</td><td>${esc(x.concepto)}</td><td>${esc(x.metodo)}</td><td><b>${money(x.monto)}</b></td><td>${x.tipo==='Egreso'?'<button class="management-link danger" data-expense-delete="'+esc(x.id)+'">Eliminar</button>':'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="management-empty">No hay movimientos en este período.</p>';
-    root.querySelector('#finance-csv').onclick=()=>downloadCsv('finanzas.csv',['Fecha','Tipo','Categoría','Concepto','Método','Monto'],rows.map(x=>[dateText(x.fecha),x.tipo,x.categoria,x.concepto,x.metodo,x.monto]));
-  }
-  from.addEventListener('change',refresh);to.addEventListener('change',refresh);
-  root.querySelector('#expense-form').addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget)),amount=Number(d.monto);
-    if(!d.concepto.trim()||!Number.isFinite(amount)||amount<=0){alert('Ingresa un concepto y monto válido.');return;}
-    appState.expenses.push({id:makeId('egreso'),concepto:d.concepto.trim(),categoria:d.categoria,monto:amount,fecha:new Date(d.fecha+'T12:00:00').getTime(),metodoPago:d.metodoPago,notas:d.notas.trim(),createdAt:Date.now()});
-    saveAppState();renderManagementView(root,'finance');notify('Egreso registrado.');
-  });
-  root.querySelector('#finance-table').addEventListener('click',e=>{
-    const del=e.target.closest('[data-expense-delete]');if(!del)return;
-    if(!confirm('¿Eliminar este egreso del registro financiero?'))return;
-    appState.expenses=appState.expenses.filter(x=>x.id!==del.dataset.expenseDelete);saveAppState();refresh();notify('Egreso eliminado.');
-  });
-  refresh();
-}
-
-export function renderManagementView(container, section='dashboard') {
-  active=section;container.innerHTML=shell(section);
-  attachBackup(container);
-  if(section==='products'){renderProductsTable(container.querySelector('#products-table'));attachProducts(container);}
-  if(section==='clients'){renderClientsTable(container.querySelector('#clients-table'));attachClients(container);}
-  if(section==='sales'){renderSalesTable(container.querySelector('#sales-table'));attachSales(container);}
-  if(section==='consignments'){renderConsignments(container.querySelector('#consignments-table'));attachConsignments(container);}
-  if(section==='finance')attachFinance(container);
-  if(section==='settings')attachSettings(container);
-}
-,'i');
+  const pattern = new RegExp('^AM3D-' + prefix + '-(\\d+)$','i');
   const max = appState.products.reduce((highest, product) => {
     const match = String(product.codigo || '').match(pattern);
     return match ? Math.max(highest, Number(match[1])) : highest;
@@ -894,7 +299,7 @@ export function renderManagementView(container, section='dashboard') {
   return 'AM3D-' + prefix + '-' + String(max + 1).padStart(4,'0');
 }
 function nextVariantCode(product, name) {
-  const suffix = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const suffix = String(name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
     .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'VARIANTE';
   const base = String(product?.codigo || 'AM3D') + '-' + suffix;
   let code = base;
@@ -1056,7 +461,30 @@ function attachBackup(root) {
   });
 }
 function attachProducts(root) {
-  root.querySelector('#catalog-add-product').addEventListener('click',()=>{const tipo=prompt('Tipo de producto (ACC, FIG, HOG, etc.):','ACC');if(tipo===null)return;const codigo=prompt('Código único del producto:');if(codigo===null)return;const nombre=prompt('Nombre del producto:');if(nombre===null)return;const type=String(tipo).trim().toUpperCase(),code=String(codigo).trim(),name=String(nombre).trim();if(!code||!name||!PRODUCT_TYPES.some(([x])=>x===type)){alert('Completa un tipo válido, código y nombre.');return;}if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('Ese código ya está utilizado.');return;}appState.products.push({id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()});saveAppState();renderManagementView(root,'products');notify('Producto creado.');});
+  root.querySelector('#catalog-add-product').addEventListener('click',async()=>{
+    const typeText=prompt('Tipo de producto (DEC, FUN, REP, PER, MIN, ACC, HOG o PRO):','ACC');
+    if(typeText===null)return;
+    const type=String(typeText).trim().toUpperCase();
+    if(!PRODUCT_TYPES.some(([value])=>value===type)){alert('Selecciona un tipo válido.');return;}
+    const nameText=prompt('Nombre del producto:');
+    if(nameText===null)return;
+    const name=String(nameText).trim();
+    if(!name){alert('El nombre del producto es obligatorio.');return;}
+    const code=nextProductCode(type);
+    if(!confirm('Se generará el código '+code+'. ¿Crear el producto?'))return;
+    if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código generado ya existe. Vuelve a intentarlo.');return;}
+    const product={id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()};
+    appState.products.push(product);
+    try{
+      const persisted=await saveAppState();
+      if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+      renderManagementView(root,'products');notify('Producto creado con el código '+code+'.');
+    }catch(error){
+      appState.products=appState.products.filter(item=>item.id!==product.id);
+      alert('No se pudo crear el producto: '+error.message);
+      renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
+    }
+  });
   /* El alta se realiza desde el botón compacto; no hay formulario fijo en pantalla. */
   const form=null;
   if(form)form.addEventListener('submit',e=>{
@@ -1076,7 +504,8 @@ function attachProducts(root) {
     if(addVariant){
       const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
       const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
-      const code=prompt('Código/SKU único de esta variante (por ejemplo, '+product.codigo+'-NEG):');if(code===null)return;
+      const suggestedCode=nextVariantCode(product,name);
+      const code=prompt('Código/SKU único de esta variante:',suggestedCode);if(code===null)return;
       try{
         const values=validateVariantInput({code,name},appState.products);
         if(!Array.isArray(product.variantes))product.variantes=[];
@@ -1199,6 +628,39 @@ function attachProducts(root) {
     const sellJob=e.target.closest('[data-sell-job]');
     const assign=e.target.closest('[data-assign-existing]');
     const create=e.target.closest('[data-create-assign]');
+    if(create){
+      const job=getJob(create.dataset.createAssign);
+      const nameField=root.querySelector('[data-new-name="'+create.dataset.createAssign+'"]');
+      const typeField=root.querySelector('[data-new-type="'+create.dataset.createAssign+'"]');
+      const codeField=root.querySelector('[data-new-code="'+create.dataset.createAssign+'"]');
+      const name=String(nameField?.value||'').trim();
+      const type=String(typeField?.value||'').trim().toUpperCase();
+      const code=String(codeField?.value||'').trim();
+      if(!job?.data){alert('No se encontró el trabajo que deseas asignar.');return;}
+      if(!name||!code||!PRODUCT_TYPES.some(([value])=>value===type)){alert('Completa un nombre, tipo y código válido.');return;}
+      if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código '+code+' ya está utilizado.');return;}
+      const previousProductId=job.data.productoId??null;
+      const previousVariantId=job.data.variantId??null;
+      const product={id:makeId('prod'),codigo:code,tipo,nombre:name,notas:'',createdAt:Date.now()};
+      create.disabled=true;
+      appState.products.push(product);
+      job.data.productoId=product.id;
+      job.data.variantId=null;
+      job.updatedAt=Date.now();
+      try{
+        const persisted=await saveAppState();
+        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+        renderManagementView(root,'products');
+        notify('Producto creado y trabajo asignado con el código '+code+'.');
+      }catch(error){
+        appState.products=appState.products.filter(item=>item.id!==product.id);
+        job.data.productoId=previousProductId;
+        job.data.variantId=previousVariantId;
+        alert('No se pudo crear y asignar el producto: '+error.message);
+        renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
+      }
+      return;
+    }
     if(sellJob){
       const job=getJob(sellJob.dataset.sellJob),product=getProduct(job?.data?.productoId);
       if(!job||!product){alert('Primero asigna este trabajo a un producto del catálogo.');return;}
