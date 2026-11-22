@@ -221,18 +221,16 @@ function products() {
     <section class="management-card product-catalog-card">
       <div class="product-catalog-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Productos</h3><p>Una ficha por modelo; variantes, existencias y etiquetas dentro de cada producto.</p></div><span class="product-count">${appState.products.length} modelos</span></div>
       <div class="management-search-wrap"><input class="management-search" id="product-search" type="search" placeholder="Buscar por código, nombre o variante…"></div>
+      <div class="catalog-production-divider"><span>PRODUCTOS DEL CATÁLOGO</span><small>Ficha, variantes, códigos y existencias</small></div>
       <div id="products-table" class="product-card-list"></div>
+      <div class="catalog-production-divider catalog-jobs-divider"><span>TRABAJOS POR VINCULAR Y PRODUCCIÓN</span><small>Asigna productos y códigos; controla ventas y reimpresiones desde cada trabajo</small></div>
+      <div class="production-panel-heading">
+        <div><h4>Trabajos terminados</h4><p>Los trabajos sin producto asignado se destacan para que puedas identificarlos y clasificarlos rápidamente.</p></div>
+        <span class="production-panel-count">${appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado').length} trabajos</span>
+      </div>
+      <div id="completed-jobs-table" class="production-job-list"></div>
     </section>
   </div>
-  <details class="management-card product-secondary-section" id="production-operations" open>
-    <summary><span>Trabajos y asignaciones</span><small>Un solo panel para clasificar, controlar stock y gestionar reimpresiones</small></summary>
-    <div class="production-panel-heading">
-      <div><h4>Producción terminada</h4><p>Asigna cada trabajo a un producto y, si corresponde, a una variante. Consulta unidades disponibles y acciones sin desplazamiento horizontal.</p></div>
-      <span class="production-panel-count">${appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado').length} trabajos</span>
-    </div>
-    <div id="completed-jobs-table" class="production-job-list"></div>
-  </details>`;
-}
 function clients() {
   return `<div class="management-grid">
     <form class="management-card" id="client-form"><h3 id="client-form-title">Nuevo cliente o tienda</h3><input type="hidden" name="id">
@@ -319,14 +317,16 @@ function nextProductCode(prefix) {
   }, 0);
   return 'AM3D-' + prefix + '-' + String(max + 1).padStart(4,'0');
 }
-function renderCompletedJobs(root) {
+function renderCompletedJobs(root, query='') {
   const completed = appState.jobs.filter(job => !job.data?.estadoTrabajo || job.data.estadoTrabajo === 'realizado')
     .sort((a,b) => Number(b.createdAt || b.updatedAt || b.data?.fecha || 0) - Number(a.createdAt || a.updatedAt || a.data?.fecha || 0));
-  if (!completed.length) {
+  const q=String(query||'').trim().toLocaleLowerCase('es');
+  const filtered=completed.filter(job=>[job.data?.nombre,job.data?.cliente,getProduct(job.data?.productoId)?.nombre,getProduct(job.data?.productoId)?.codigo].join(' ').toLocaleLowerCase('es').includes(q));
+  if (!filtered.length) {
     root.innerHTML = '<p class="management-empty">Todavía no hay trabajos realizados. Cuando marques un trabajo como realizado aparecerá aquí automáticamente.</p>';
     return;
   }
-  root.innerHTML = completed.map(job => {
+  root.innerHTML = filtered.map(job => {
     const quantity = pieces(job);
     const sold = appState.sales.filter(sale => sale.jobId === job.id).reduce((sum,sale) => sum + Number(sale.cantidad || 1),0);
     const available = Math.max(0,quantity-sold);
@@ -334,6 +334,7 @@ function renderCompletedJobs(root) {
     const variants = getProductVariants(product);
     const selectedCategory = product?.tipo || 'ACC';
     const prefix = PRODUCT_TYPES.some(([code])=>code===selectedCategory) ? selectedCategory : 'ACC';
+    const assignmentStatus = !product ? ['unassigned','SIN CÓDIGO ASIGNADO'] : job.data.variantId && variants.some(v=>v.id===job.data.variantId) ? ['assigned','CÓDIGO '+(variants.find(v=>v.id===job.data.variantId)?.codigo||'')] : ['partial','PRODUCTO '+product.codigo+' · '+(variants.length?'FALTA VARIANTE':'CÓDIGO ASIGNADO')];
     const status = available === 0 ? ['agotado','Agotado'] : sold > 0 ? ['parcial','Disponible parcial'] : ['available','Disponible'];
     const soldItems = appState.sales.filter(sale => sale.jobId === job.id);
     const soldDetail = soldItems.length ? soldItems.map(sale => dateText(sale.fecha)+' · '+(sale.cliente||'Sin cliente')+' · '+(sale.cantidad||1)+' pza · '+money(sale.monto)).join(' | ') : 'Sin ventas registradas';
@@ -341,7 +342,7 @@ function renderCompletedJobs(root) {
     return `<article class="production-job-card">
       <div class="production-job-top">
         <div class="production-job-identity"><span class="production-job-date">${dateText(job.data.fecha)}</span><h5>${esc(job.data.nombre || 'Trabajo sin nombre')}</h5><p>${esc(job.data.cliente || 'Sin cliente')}</p></div>
-        <span class="production-status production-status-${status[0]}" title="${esc('Ventas: '+soldDetail+' · Vendidas: '+sold+' · Disponibles: '+available)}">${status[1]}</span>
+        <span class="production-status production-status-${assignmentStatus[0]}" title="Estado de asignación">${esc(assignmentStatus[1])}</span>
       </div>
       <div class="production-job-metrics">
         <div><small>PRODUCIDAS</small><b>${quantity}</b></div>
@@ -504,7 +505,7 @@ function attachProducts(root) {
     else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
     saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
   });
-  root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
+  root.querySelector('#product-search').addEventListener('input',e=>{renderProductsTable(root.querySelector('#products-table'),e.target.value);renderCompletedJobs(root.querySelector('#completed-jobs-table'),e.target.value);});
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
     const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
