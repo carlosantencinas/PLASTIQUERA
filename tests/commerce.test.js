@@ -172,3 +172,12 @@ test('una reimpresión de otro color puede venderse desde el mismo trabajo sin m
   });
   assert.throws(() => assertJobVariantCanSell(job, 'red', 5, []), /Disponibles: 4/);
 });
+
+
+test('usa piezas impresas como fuente cuando piezasVendibles quedó desactualizado', async () => {
+  const { getJobBaseSellableQuantity, getJobSellableQuantity, getProductStock } = await import('../src/calculations/commerce.js');
+  const job = { id: 'job-4', data: { productoId: 'p4', piezas: 4, piezasFallidas: 0, piezasVendibles: 1 } };
+  assert.equal(getJobBaseSellableQuantity(job), 4);
+  assert.equal(getJobSellableQuantity(job), 4);
+  assert.deepEqual(getProductStock('p4', [job], [], []), { produced: 4, sold: 0, consigned: 0, available: 4 });
+});
