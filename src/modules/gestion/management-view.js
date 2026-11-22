@@ -367,14 +367,42 @@ function printProductBarcode(product, variant = null) {
   const code = String(variant?.codigo || product?.codigo || '').trim();
   const labelName = variant ? product.nombre + ' · ' + variant.nombre : product?.nombre;
   if (!code) { alert('Este registro no tiene un código interno. Asígnale uno antes de generar la etiqueta.'); return; }
-  const popup = window.open('', '_blank', 'width=520,height=420');
-  if (!popup) { alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio.'); return; }
-  popup.document.open();
-  popup.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiqueta ' + esc(code) + '</title><style>@page{size:70mm 40mm;margin:3mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:5mm;text-align:center;color:#111}.name{font-weight:700;font-size:14px;margin-bottom:3mm}.code{font-size:11px;letter-spacing:.5px;margin-top:2mm}svg{max-width:100%;height:auto}.hint{font-size:9px;color:#555;margin-top:2mm}@media screen{body{max-width:70mm;margin:20px auto;border:1px solid #ddd}}</style></head><body><div class="name">' + esc(labelName) + '</div><svg id="product-barcode"></svg><div class="code">' + esc(code) + '</div><div class="hint">AM3D · Code 128 · ' + (variant ? 'Variante' : 'Producto') + '</div></body></html>');
-  popup.document.close();
-  try { JsBarcode(popup.document.getElementById('product-barcode'), code, {format:'CODE128',displayValue:false,margin:2,height:48,width:1.7}); }
-  catch (error) { popup.close(); alert('No se pudo generar el código de barras: ' + error.message); return; }
-  popup.focus(); popup.setTimeout(() => popup.print(), 300);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('xmlns', ns); svg.setAttribute('width', '70mm');
+  svg.setAttribute('height', '40mm'); svg.setAttribute('viewBox', '0 0 700 400');
+  svg.setAttribute('version', '1.1');
+  const textNode = (x, y, value, size, weight = 'normal') => {
+    const node = document.createElementNS(ns, 'text');
+    node.setAttribute('x', x); node.setAttribute('y', y);
+    node.setAttribute('text-anchor', 'middle');
+    node.setAttribute('font-family', 'Arial, sans-serif');
+    node.setAttribute('font-size', size); node.setAttribute('font-weight', weight);
+    node.textContent = value; svg.append(node);
+  };
+  const border = document.createElementNS(ns, 'rect');
+  border.setAttribute('x', '5'); border.setAttribute('y', '5');
+  border.setAttribute('width', '690'); border.setAttribute('height', '390');
+  border.setAttribute('fill', '#fff'); border.setAttribute('stroke', '#aaa');
+  border.setAttribute('stroke-dasharray', '8 6'); border.setAttribute('stroke-width', '2');
+  svg.append(border);
+  textNode(350, 75, String(labelName || 'Producto').slice(0, 60), 30, 'bold');
+  const barcode = document.createElementNS(ns, 'svg');
+  barcode.setAttribute('x', '70'); barcode.setAttribute('y', '105');
+  barcode.setAttribute('width', '560'); barcode.setAttribute('height', '190');
+  barcode.setAttribute('viewBox', '0 0 600 200'); barcode.setAttribute('preserveAspectRatio', 'none');
+  svg.append(barcode);
+  try { JsBarcode(barcode, code, { format: 'CODE128', displayValue: false, margin: 2, height: 150, width: 2 }); }
+  catch (error) { alert('No se pudo generar el código de barras: ' + error.message); return; }
+  textNode(350, 340, code, 28, 'bold');
+  textNode(350, 375, 'AM3D · CODE 128 · ' + (variant ? 'VARIANTE' : 'PRODUCTO'), 17);
+  const serialized = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\\n' + serialized], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = 'etiqueta-' + code.replace(/[^a-z0-9_-]/gi, '-') + '.svg';
+  document.body.append(link); link.click(); link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 function renderProductsTable(root, query='') {
   const q=String(query||'').trim().toLocaleLowerCase('es');
