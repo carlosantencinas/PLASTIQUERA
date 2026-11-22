@@ -695,13 +695,6 @@ function attachProducts(root) {
       saveAppState();renderManagementView(root,'products');notify('Producto creado y trabajo asignado.');
     }
   });
-  root.querySelector('#product-assignments').addEventListener('change',e=>{
-    const sel=e.target.closest('[data-job-product]');if(!sel)return;
-    const job=getJob(sel.dataset.jobProduct);if(job)job.data.productoId=sel.value||null;
-  });
-  root.querySelector('#product-assignments').addEventListener('click',e=>{
-    if(e.target.id==='save-assignments'){saveAppState();renderManagementView(root,'products');notify('Asignaciones guardadas.');}
-  });
 }
 function attachClients(root) {
   const form=root.querySelector('#client-form');
