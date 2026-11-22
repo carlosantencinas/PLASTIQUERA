@@ -499,7 +499,7 @@ function attachProducts(root) {
       if(codeField)codeField.value=nextProductCode(type.value);
     }
   });
-  root.querySelector('#completed-jobs-table').addEventListener('click',async e=>{
+  root.querySelector('#products-table').addEventListener('click',async e=>{
     const reverseButton=e.target.closest('[data-reverse-production-batch]');
     if(reverseButton){
       const job=getJob(reverseButton.dataset.reverseProductionBatch);
