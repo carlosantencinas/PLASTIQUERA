@@ -404,15 +404,26 @@ function printProductBarcode(product, variant = null) {
   document.body.append(link); link.click(); link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+
 function renderProductsTable(root, query='') {
  const q=String(query||'').trim().toLocaleLowerCase('es');
- const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo])].join(' ').toLocaleLowerCase('es').includes(q));
- const jobs=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')&&[j.data?.nombre,j.data?.cliente,getProduct(j.data?.productoId)?.nombre,getProduct(j.data?.productoId)?.codigo].join(' ').toLocaleLowerCase('es').includes(q));
- const rows=[];
- products.forEach(p=>{const st=stockFor(p.id),vs=getProductVariants(p);rows.push(`<div class="catalog-unified-row catalog-product-row"><div><span class="catalog-row-kind">PRODUCTO</span><b>${esc(p.nombre)}</b><code>${esc(p.codigo)}</code></div><div><b>${st.available}</b> disponibles<small>${st.produced} producidas · ${st.sold} vendidas</small></div><div class="catalog-row-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div><details><summary>Variantes y códigos (${vs.length})</summary>${vs.map(v=>{const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="catalog-variant-line"><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code> · ${x.available} disponibles <button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('')}<button class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details></div>`);});
- jobs.forEach(j=>{const p=getProduct(j.data?.productoId),variants=getProductVariants(p),variant=variants.find(v=>v.id===j.data?.variantId),qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),status=!p?'SIN PRODUCTO / CÓDIGO':variants.length&&!variant?'FALTA VARIANTE / CÓDIGO': 'ASIGNADO · '+(variant?.codigo||p.codigo);rows.push(`<div class="catalog-unified-row catalog-job-row ${!p?'catalog-job-unassigned':variants.length&&!variant?'catalog-job-partial':'catalog-job-assigned'}"><div><span class="catalog-row-kind">TRABAJO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small><span class="catalog-assignment-state">${esc(status)}</span></div><div class="catalog-quantities"><b>${qty}</b> prod. · <b>${sold}</b> vend. · <b>${available}</b> disp.</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar producto…</option>${appState.products.map(x=>`<option value="${esc(x.id)}" ${p?.id===x.id?'selected':''}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select><select data-existing-variant="${esc(j.id)}" ${!variants.length?'disabled':''}><option value="">Seleccionar variante…</option>${variants.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar código</button></div><div class="catalog-row-actions">${available? `<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button></div><details><summary>Historial: ${appState.sales.filter(x=>x.jobId===j.id).length} ventas · ${(j.data.productionBatches||[]).length} reimpresiones</summary>${appState.sales.filter(x=>x.jobId===j.id).map(x=>`<p>${dateText(x.fecha)} · ${x.cantidad||1} unidades · ${money(x.monto)}</p>`).join('')}${(j.data.productionBatches||[]).map(x=>`<p>${dateText(x.date)} · ${x.producedQuantity} producidas · ${x.sellableQuantity} vendibles · ${x.status==='reversed'?'Revertida':'Activa'} ${x.status==='reversed'?'':`<button class="management-link danger" data-reverse-production-batch="${esc(j.id)}" data-batch-id="${esc(x.id)}">Revertir</button>`}</p>`).join('')}</details></div>`);});
- root.innerHTML=rows.length?`<div class="catalog-table-head"><span>PRODUCTO / TRABAJO</span><span>CANTIDADES Y STOCK</span><span>ASIGNACIÓN / CÓDIGOS</span><span>VENTAS Y PRODUCCIÓN</span></div>${rows.join('')}`:'<p class="management-empty">No hay productos ni trabajos que coincidan.</p>';
+ const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo]),...appState.jobs.filter(j=>j.data?.productoId===p.id).flatMap(j=>[j.data?.nombre,j.data?.cliente])].join(' ').toLocaleLowerCase('es').includes(q));
+ const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado'));
+ const jobsForProduct=id=>completed.filter(j=>j.data?.productoId===id);
+ const unassigned=completed.filter(j=>!j.data?.productoId);
+ const rows=products.map(p=>{
+   const st=stockFor(p.id),vs=getProductVariants(p),linked=jobsForProduct(p.id).filter(j=>[j.data?.nombre,j.data?.cliente,p.nombre,p.codigo].join(' ').toLocaleLowerCase('es').includes(q));
+   const jobRows=linked.map(j=>{
+     const qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold);
+     const variants=getProductVariants(p),variant=variants.find(v=>v.id===j.data?.variantId);
+     return `<div class="catalog-linked-job"><div><b>${esc(j.data?.nombre||p.nombre)}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small></div><div class="catalog-quantities"><b>${qty}</b> prod. · <b>${sold}</b> vend. · <b>${available}</b> disp.</div><div class="catalog-assignment-controls"><select data-existing-variant="${esc(j.id)}" ${!variants.length?'disabled':''}><option value="">${variants.length?'Sin variante':'Sin variantes'}</option>${variants.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar variante</button></div><div class="catalog-row-actions">${available?`<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button></div><details><summary>Historial de ventas y lotes</summary>${appState.sales.filter(x=>x.jobId===j.id).map(x=>`<p>${dateText(x.fecha)} · ${x.cantidad||1} unidades · ${money(x.monto)}</p>`).join('')}${(j.data.productionBatches||[]).map(x=>`<p>${dateText(x.date)} · ${x.producedQuantity} producidas · ${x.sellableQuantity} vendibles · ${x.status==='reversed'?'Revertida':'Activa'} ${x.status==='reversed'?'':`<button class="management-link danger" data-reverse-production-batch="${esc(j.id)}" data-batch-id="${esc(x.id)}">Revertir</button>`}</p>`).join('')}</details></div>`;
+   }).join('');
+   return `<div class="catalog-unified-row catalog-product-row"><div><span class="catalog-row-kind">PRODUCTO</span><b>${esc(p.nombre)}</b><code>${esc(p.codigo)}</code><small>${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'Sin tipo')}</small></div><div><b>${st.available}</b> disponibles<small>${st.produced} producidas · ${st.sold} vendidas</small></div><div class="catalog-row-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div><details><summary>Variantes y códigos (${vs.length})</summary>${vs.map(v=>{const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="catalog-variant-line"><b>${esc(v.nombre)}</b> <code>${esc(v.codigo)}</code> · ${x.available} disponibles <button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('')}<button class="management-link" data-variant-add="${esc(p.id)}">+ Añadir variante</button></details>${jobRows?`<details class="catalog-product-jobs" open><summary>Trabajos asociados (${linked.length})</summary>${jobRows}</details>`:''}</div>`;
+ }).join('');
+ const loose=unassigned.filter(j=>[j.data?.nombre,j.data?.cliente].join(' ').toLocaleLowerCase('es').includes(q)).map(j=>`<div class="catalog-unified-row catalog-job-unassigned"><div><span class="catalog-row-kind">TRABAJO SIN PRODUCTO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small></div><div class="catalog-quantities"><b>${pieces(j)}</b> piezas vendibles</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar a producto…</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} · ${esc(p.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar</button></div><div class="catalog-row-actions"><details class="catalog-create-product"><summary>Crear producto desde trabajo</summary><div class="production-new-fields"><input data-new-name="${esc(j.id)}" value="${esc(j.data?.nombre||'')}" aria-label="Nombre del producto"><select data-new-type="${esc(j.id)}">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label}</option>`).join('')}</select><input data-new-code="${esc(j.id)}" value="${nextProductCode('ACC')}" aria-label="Código del producto"><button class="management-button" data-create-assign="${esc(j.id)}">Crear y asignar</button></div></details></div></div>`).join('');
+ root.innerHTML=(rows||loose)?`<div class="catalog-table-head"><span>PRODUCTOS</span><span>STOCK TOTAL</span><span>ACCIONES</span><span>PRODUCCIÓN ASOCIADA</span></div>${rows}${loose?`<section class="catalog-unassigned-section"><h4>Casos especiales · trabajos sin producto (${unassigned.length})</h4>${loose}</section>`:''}`:'<p class="management-empty">No hay productos ni trabajos que coincidan.</p>';
 }
+
 function renderAssignments(root) {
   if (!appState.jobs.length) { root.innerHTML='<p class="management-empty">Registra primero un trabajo para poder asignarlo.</p>'; return; }
   root.innerHTML=appState.jobs.map(j=>{
@@ -460,41 +471,70 @@ function attachBackup(root) {
     try{await importBackup(file);notify('Respaldo importado correctamente.');renderManagementView(root,active);}catch(error){alert(error.message);}
   });
 }
-function attachProducts(root) {
-  root.querySelector('#catalog-add-product').addEventListener('click',async()=>{
-    const typeText=prompt('Tipo de producto (DEC, FUN, REP, PER, MIN, ACC, HOG o PRO):','ACC');
-    if(typeText===null)return;
-    const type=String(typeText).trim().toUpperCase();
-    if(!PRODUCT_TYPES.some(([value])=>value===type)){alert('Selecciona un tipo válido.');return;}
-    const nameText=prompt('Nombre del producto:');
-    if(nameText===null)return;
-    const name=String(nameText).trim();
-    if(!name){alert('El nombre del producto es obligatorio.');return;}
-    const code=nextProductCode(type);
-    if(!confirm('Se generará el código '+code+'. ¿Crear el producto?'))return;
-    if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código generado ya existe. Vuelve a intentarlo.');return;}
-    const product={id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()};
-    appState.products.push(product);
+
+function openProductDialog(root, product=null) {
+  const editing=Boolean(product);
+  const dialog=document.createElement('dialog');
+  dialog.className='management-form-dialog product-edit-dialog';
+  const typeOptions=PRODUCT_TYPES.map(([value,label])=>`<option value="${value}" ${(product?.tipo||'ACC')===value?'selected':''}>${label}</option>`).join('');
+  const initialType=product?.tipo||'ACC';
+  const initialCode=product?.codigo||nextProductCode(initialType);
+  dialog.innerHTML=`<form method="dialog" class="management-dialog-form" id="product-dialog-form">
+    <div class="management-dialog-heading"><div><p class="eyebrow">CATÁLOGO DE PRODUCTOS</p><h3>${editing?'Editar producto':'Crear producto'}</h3><p>${editing?'Actualiza los datos del producto. Los trabajos y ventas vinculados se conservarán.':'El código se genera automáticamente según el tipo y puedes modificarlo antes de guardar.'}</p></div><button type="button" class="management-dialog-close" aria-label="Cerrar" data-dialog-close>×</button></div>
+    <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
+    <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
+    <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
+    <label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
+    <p class="management-dialog-error" role="alert" hidden></p>
+    <div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">${editing?'Guardar cambios':'Crear producto'}</button></div>
+  </form>`;
+  const form=dialog.querySelector('form');
+  const error=dialog.querySelector('.management-dialog-error');
+  const codeInput=form.elements.codigo;
+  const regenerate=()=>{codeInput.value=nextProductCode(form.elements.tipo.value);};
+  form.elements.tipo.addEventListener('change',()=>{if(!editing||codeInput.dataset.manual!=='true')regenerate();});
+  codeInput.addEventListener('input',()=>{codeInput.dataset.manual='true';});
+  dialog.querySelector('[data-regenerate-code]').addEventListener('click',()=>{codeInput.dataset.manual='false';regenerate();});
+  dialog.querySelectorAll('[data-dialog-close]').forEach(button=>button.addEventListener('click',()=>dialog.close()));
+  dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const data=Object.fromEntries(new FormData(form));
+    const name=String(data.nombre||'').trim(), code=String(data.codigo||'').trim(), type=String(data.tipo||'').trim().toUpperCase();
+    error.hidden=true;
+    if(!name||!code||!PRODUCT_TYPES.some(([value])=>value===type)){error.textContent='Completa el nombre, tipo y código del producto.';error.hidden=false;return;}
+    if(!isProductCodeAvailable(code,appState.products,{productId:product?.id||null,kind:'product'})){error.textContent='Ese código ya está utilizado por otro producto o variante.';error.hidden=false;return;}
+    const previous=product?{...product}:null;
+    const record=product||{id:makeId('prod'),createdAt:Date.now()};
+    Object.assign(record,{codigo:code,tipo,nombre:name,notas:String(data.notas||'').trim()});
+    if(!product)appState.products.push(record);
+    const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
     try{
       const persisted=await saveAppState();
       if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-      renderManagementView(root,'products');notify('Producto creado con el código '+code+'.');
-    }catch(error){
-      appState.products=appState.products.filter(item=>item.id!==product.id);
-      alert('No se pudo crear el producto: '+error.message);
-      renderProductsTable(root.querySelector('#products-table'),root.querySelector('#product-search')?.value||'');
+      dialog.close();renderManagementView(root,'products');notify(editing?'Producto actualizado.':'Producto creado con el código '+code+'.');
+    }catch(err){
+      if(product)Object.assign(product,previous);else appState.products=appState.products.filter(item=>item.id!==record.id);
+      error.textContent='No se pudo guardar: '+err.message;error.hidden=false;submit.disabled=false;submit.textContent=editing?'Guardar cambios':'Crear producto';
     }
   });
-  /* El alta se realiza desde el botón compacto; no hay formulario fijo en pantalla. */
-  const form=null;
-  if(form)form.addEventListener('submit',e=>{
-    e.preventDefault();const d=Object.fromEntries(new FormData(form));const code=String(d.codigo||'').trim();const name=String(d.nombre||'').trim();
-    if(!code||!name){alert('El código y el nombre del producto son obligatorios.');return;}
-    if(!isProductCodeAvailable(code,appState.products,{productId:d.id||null,kind:'product'})){alert('Ese código ya está utilizado por otro producto o variante.');return;}
-    if(d.id){const product=getProduct(d.id);if(!product){alert('No se encontró el producto que intentas editar. Actualiza la vista y vuelve a intentarlo.');return;}Object.assign(product,{codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim()});}
-    else appState.products.push({id:makeId('prod'),codigo:code,tipo:d.tipo,nombre,notas:String(d.notas||'').trim(),createdAt:Date.now()});
-    saveAppState();renderManagementView(root,'products');notify('Producto guardado.');
-  });
+  document.body.append(dialog);dialog.showModal();
+}
+
+
+function openVariantDialog(root,product) {
+  const dialog=document.createElement('dialog');dialog.className='management-form-dialog product-edit-dialog';
+  dialog.innerHTML=`<form method="dialog" class="management-dialog-form"><div class="management-dialog-heading"><div><p class="eyebrow">VARIANTES</p><h3>Nueva variante</h3><p>${esc(product.nombre)} · Código base ${esc(product.codigo)}</p></div><button type="button" class="management-dialog-close" data-dialog-close>×</button></div><label class="management-field">Nombre de la variante<input name="nombre" required placeholder="Ej. Negro"></label><label class="management-field">Código / SKU<div class="management-code-field"><input name="codigo" required><button type="button" class="management-button secondary" data-regenerate-variant>Generar</button></div></label><p class="management-dialog-error" role="alert" hidden></p><div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">Guardar variante</button></div></form>`;
+  const form=dialog.querySelector('form'),code=form.elements.codigo,error=dialog.querySelector('.management-dialog-error');
+  const generate=()=>{code.value=nextVariantCode(product,form.elements.nombre.value);};
+  form.elements.nombre.addEventListener('input',generate);dialog.querySelector('[data-regenerate-variant]').addEventListener('click',generate);
+  dialog.querySelectorAll('[data-dialog-close]').forEach(b=>b.addEventListener('click',()=>dialog.close()));
+  form.addEventListener('submit',async e=>{e.preventDefault();try{const values=validateVariantInput({code:code.value,name:form.elements.nombre.value},appState.products);const variant={id:makeId('var'),...values,activo:true,createdAt:Date.now()};if(!Array.isArray(product.variantes))product.variantes=[];product.variantes.push(variant);const ok=await saveAppState();if(!ok)throw new Error('Firestore no confirmó el guardado.');dialog.close();renderManagementView(root,'products');notify('Variante guardada.');}catch(err){error.textContent=err.message;error.hidden=false;}});
+  document.body.append(dialog);dialog.showModal();
+}
+
+function attachProducts(root) {
+  root.querySelector('#catalog-add-product').addEventListener('click',()=>openProductDialog(root));
   root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
@@ -503,18 +543,10 @@ function attachProducts(root) {
     if(variantBarcode){const product=getProduct(variantBarcode.dataset.variantBarcode);const variant=getProductVariants(product).find(item=>item.id===variantBarcode.dataset.variantId);if(product&&variant)printProductBarcode(product,variant);}
     if(addVariant){
       const product=getProduct(addVariant.dataset.variantAdd);if(!product)return;
-      const name=prompt('Nombre de la variante (por ejemplo, Negro):');if(name===null)return;
-      const suggestedCode=nextVariantCode(product,name);
-      const code=prompt('Código/SKU único de esta variante:',suggestedCode);if(code===null)return;
-      try{
-        const values=validateVariantInput({code,name},appState.products);
-        if(!Array.isArray(product.variantes))product.variantes=[];
-        product.variantes.push({id:makeId('var'),...values,activo:true,createdAt:Date.now()});
-        saveAppState();renderManagementView(root,'products');notify('Variante guardada. Ya puedes imprimir su etiqueta individual.');
-      }catch(error){alert(error.message);}
+      openVariantDialog(root,product);
       return;
     }
-    if(edit){const p=getProduct(edit.dataset.productEdit);if(!p)return;const name=prompt('Nombre del producto:',p.nombre);if(name===null)return;const code=prompt('Código del producto:',p.codigo);if(code===null)return;const type=prompt('Tipo del producto:',p.tipo||'ACC');if(type===null)return;if(!name.trim()||!code.trim()||!PRODUCT_TYPES.some(([x])=>x===type.trim().toUpperCase())){alert('Datos de producto no válidos.');return;}if(!isProductCodeAvailable(code.trim(),appState.products,{productId:p.id,kind:'product'})){alert('Ese código ya está utilizado.');return;}Object.assign(p,{nombre:name.trim(),codigo:code.trim(),tipo:type.trim().toUpperCase()});saveAppState();renderManagementView(root,'products');notify('Producto actualizado.');}
+    if(edit){const p=getProduct(edit.dataset.productEdit);if(p)openProductDialog(root,p);}
     if(del){const id=del.dataset.productDelete;
       const hasSales=appState.sales.some(s=>s.productoId===id);
       const hasConsignments=appState.consignments.some(c=>c.productoId===id);
@@ -684,7 +716,7 @@ function attachProducts(root) {
     if(assign){
       const job=getJob(assign.dataset.assignExisting);
       const select=root.querySelector('[data-existing-product="'+assign.dataset.assignExisting+'"]');
-      const productId=String(select?.value||'');
+      const productId=String(select?select.value:(job?.data?.productoId||''));
       const product=appState.products.find(item=>item.id===productId);
       if(!job||!job.data||!productId||!product){alert('Selecciona un producto existente válido.');return;}
       const variantSelect=root.querySelector('[data-existing-variant="'+assign.dataset.assignExisting+'"]');

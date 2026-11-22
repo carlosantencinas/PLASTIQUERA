@@ -1206,3 +1206,28 @@ body { background: #f5f5f2; }
   .catalog-unified-row, .production-job-card,
   .catalog-assignment-controls select, .production-job-link select { border-color: #7a8494; }
 }
+
+/* Formularios reales de catálogo: sin prompt/alert para alta y edición */
+.management-form-dialog{width:min(560px,calc(100vw - 28px));max-width:none;max-height:calc(100dvh - 32px);padding:0;border:1px solid #d8dfeb;border-radius:18px;background:#fff;color:#20283a;box-shadow:0 24px 80px rgba(13,24,44,.28)}
+.management-form-dialog::backdrop{background:rgba(15,23,42,.58);backdrop-filter:blur(3px)}
+.management-dialog-form{display:grid;gap:14px;padding:24px;max-height:calc(100dvh - 32px);overflow:auto}
+.management-dialog-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.management-dialog-heading h3{margin:2px 0 6px;color:#20283a;font-size:22px}
+.management-dialog-heading p:not(.eyebrow){margin:0;color:#58667c;font-size:13px;line-height:1.5}
+.management-dialog-close{width:36px;height:36px;flex:0 0 36px;border:0;border-radius:10px;background:#f0f2f7;color:#34435b;font-size:25px;cursor:pointer}
+.management-dialog-form .management-field{display:grid;gap:7px;color:#27344a;font-weight:700}
+.management-dialog-form input,.management-dialog-form select,.management-dialog-form textarea{width:100%;min-width:0;padding:11px 12px;border:1px solid #cbd5e3;border-radius:9px;background:#fff;color:#20283a;font:inherit}
+.management-code-field{display:flex;gap:8px}.management-code-field input{flex:1}
+.management-dialog-form small{color:#64748b;font-weight:400}
+.management-dialog-actions{display:flex;justify-content:flex-end;gap:9px;padding-top:8px;border-top:1px solid #e5eaf1}
+.management-dialog-error{margin:0;padding:10px 12px;border-radius:8px;background:#fff0f0;color:#a11f2b;font-size:13px}
+.management-dialog-error[hidden]{display:none}
+.catalog-linked-job{display:grid;grid-template-columns:minmax(150px,1fr) auto minmax(160px,.8fr) auto;gap:10px;align-items:center;padding:11px 10px;border-top:1px solid #e5eaf1}
+.catalog-linked-job small{display:block;margin-top:4px;color:#53627a}
+.catalog-product-jobs{grid-column:1/-1;border-top:1px solid #e1e6ef;padding-top:9px;color:#34435b}
+.catalog-product-jobs>summary,.catalog-unassigned-section>h4{font-weight:800;cursor:pointer}
+.catalog-unassigned-section{display:grid;gap:9px;margin-top:20px}
+.catalog-unassigned-section>h4{margin:0;color:#a34b23}
+.catalog-create-product{font-size:12px}.catalog-create-product .production-new-fields{display:grid;gap:7px;min-width:220px;padding:8px}
+.catalog-create-product input,.catalog-create-product select{padding:8px;border:1px solid #cbd5e3;border-radius:7px;background:#fff;color:#20283a}
+@media(max-width:760px){.catalog-linked-job{grid-template-columns:1fr}.management-dialog-form{padding:18px}.management-dialog-actions{flex-wrap:wrap}.management-dialog-actions button{flex:1}}
