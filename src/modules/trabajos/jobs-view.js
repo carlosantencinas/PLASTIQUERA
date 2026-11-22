@@ -213,7 +213,7 @@ function printProductionLabels(selectedJobs) {
   });
 
   const serialized = new XMLSerializer().serializeToString(svg);
-  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\\n' + serialized], { type: 'image/svg+xml;charset=utf-8' });
+  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>' + serialized], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
