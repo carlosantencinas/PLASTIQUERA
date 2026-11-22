@@ -397,7 +397,7 @@ function printProductBarcode(product, variant = null) {
   textNode(350, 340, code, 28, 'bold');
   textNode(350, 375, 'AM3D · CODE 128 · ' + (variant ? 'VARIANTE' : 'PRODUCTO'), 17);
   const serialized = new XMLSerializer().serializeToString(svg);
-  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\\n' + serialized], { type: 'image/svg+xml;charset=utf-8' });
+  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>' + serialized], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url; link.download = 'etiqueta-' + code.replace(/[^a-z0-9_-]/gi, '-') + '.svg';
