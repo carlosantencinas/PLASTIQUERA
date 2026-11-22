@@ -90,14 +90,37 @@ function navigate(hash) {
   jobsRoot.hidden=route[0]!=='jobs';
   inventoryRoot.hidden=route[0]!=='inventory';
   managementRoot.hidden=route[0]!=='management';
-  if(route[0]==='management')renderManagementView(managementRoot,route[1]);
+  if(route[0]==='management') {
+    try {
+      renderManagementView(managementRoot,route[1]);
+    } catch(error) {
+      showModuleError(managementRoot,'Gestión',error);
+    }
+  }
   document.querySelector('.topbar h1').textContent=route[2];
   document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.getAttribute('href')==='#'+key));
 }
+function showModuleError(root,moduleName,error) {
+  console.error(`Error al inicializar el módulo ${moduleName}:`,error);
+  const panel=document.createElement('section');
+  panel.className='management-card';
+  const heading=document.createElement('h2');
+  heading.textContent=`No se pudo iniciar el módulo ${moduleName}`;
+  const description=document.createElement('p');
+  description.textContent='La sesión y la conexión con Firestore siguen activas. Este error pertenece a la interfaz del módulo, no demuestra un fallo de la base de datos.';
+  const detail=document.createElement('pre');
+  detail.className='auth-error';
+  detail.style.whiteSpace='pre-wrap';
+  detail.textContent=error?.stack||error?.message||String(error);
+  panel.append(heading,description,detail);
+  root.replaceChildren(panel);
+}
 function mountModules() {
   if(!modulesMounted) {
-    renderJobsView(jobsRoot);
-    renderInventoryView(inventoryRoot);
+    try { renderJobsView(jobsRoot); }
+    catch(error) { showModuleError(jobsRoot,'Trabajos',error); }
+    try { renderInventoryView(inventoryRoot); }
+    catch(error) { showModuleError(inventoryRoot,'Inventario',error); }
     modulesMounted=true;
   }
   navigate(location.hash||'#inicio');
@@ -134,21 +157,43 @@ async function initializeUserSession(user,generation) {
   authScreen.hidden=false;
   document.querySelector('#login-error').textContent='';
   document.querySelector('.auth-description').textContent='Conectando con los datos del taller en Firebase…';
+  let remote;
   try {
-    const remote=await readSharedState();
+    remote=await readSharedState();
+  } catch(error) {
     if(generation!==authGeneration || auth.currentUser?.uid!==user.uid) return;
+    cloudSyncEnabled=false;
+    console.error('Error real al leer los datos de Firestore:',error);
+    document.querySelector('.auth-description').textContent='No se pudo leer la base de datos de Agencia de Modelos 3D.';
+    document.querySelector('#login-error').textContent=error.message||'Error al leer Firestore. Comprueba la conexión y las reglas.';
+    appShell.hidden=true;
+    authScreen.hidden=false;
+    return;
+  }
+  if(generation!==authGeneration || auth.currentUser?.uid!==user.uid) return;
+
+  try {
     replaceAppStateFromCloud(remote.data);
-    cloudSyncEnabled=true;
-    setStatus(remote.exists
-      ? 'Conectado. Los cambios de otros dispositivos se reflejarán automáticamente.'
-      : 'Base de Agencia de Modelos 3D creada en Firestore. Sincronización en tiempo real activa.',
-      'Tiempo real activo',true);
+  } catch(error) {
+    showModuleError(managementRoot,'Preparación de datos',error);
+  }
+  cloudSyncEnabled=true;
+  setStatus(remote.exists
+    ? 'Conectado. Los cambios de otros dispositivos se reflejarán automáticamente.'
+    : 'Base de Agencia de Modelos 3D creada en Firestore. Sincronización en tiempo real activa.',
+    'Tiempo real activo',true);
+
+  try {
     unsubscribeCloud=subscribeSharedState(({data})=>{
       if(!cloudSyncEnabled) return;
-      replaceAppStateFromCloud(data);
-      const el=document.querySelector('#save-status');
-      if(el)el.textContent='Sincronizado en tiempo real';
-      setStatus('Los cambios de los demás dispositivos se reciben automáticamente.','Tiempo real activo',true);
+      try {
+        replaceAppStateFromCloud(data);
+        const el=document.querySelector('#save-status');
+        if(el)el.textContent='Sincronizado en tiempo real';
+        setStatus('Los cambios de los demás dispositivos se reciben automáticamente.','Tiempo real activo',true);
+      } catch(error) {
+        showModuleError(managementRoot,'Actualización de datos',error);
+      }
     },error=>{
       console.error('Se perdió la escucha en tiempo real de Firestore:',error);
       setStatus('No se reciben cambios en tiempo real. Los guardados se seguirán intentando.','Escucha desconectada',false);
@@ -163,19 +208,15 @@ async function initializeUserSession(user,generation) {
       if(el)el.textContent='Conflicto: cambios no guardados';
       window.alert(message);
     });
-    mountModules();
-    appShell.hidden=false;
-    authScreen.hidden=true;
-    document.querySelector('.auth-description').textContent='Inicia sesión con la cuenta autorizada del taller.';
   } catch(error) {
-    if(generation!==authGeneration || auth.currentUser?.uid!==user.uid) return;
-    cloudSyncEnabled=false;
-    console.error(error);
-    document.querySelector('.auth-description').textContent='No se pudo conectar con la base de datos de Agencia de Modelos 3D.';
-    document.querySelector('#login-error').textContent=error.message||'Error al leer Firestore. Comprueba las reglas y vuelve a intentar.';
-    appShell.hidden=true;
-    authScreen.hidden=false;
+    console.error('No se pudo iniciar la escucha en tiempo real de Firestore:',error);
+    setStatus('Lectura inicial correcta; escucha en tiempo real no disponible.','Escucha desconectada',false);
   }
+
+  mountModules();
+  appShell.hidden=false;
+  authScreen.hidden=true;
+  document.querySelector('.auth-description').textContent='Inicia sesión con la cuenta autorizada del taller.';
 }
 document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',event=>{
   event.preventDefault();
