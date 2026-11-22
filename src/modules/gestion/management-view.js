@@ -633,7 +633,6 @@ function attachProducts(root) {
         job.updatedAt=Date.now();
         const persisted=await saveAppState();
         if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-        renderCompletedJobs(root.querySelector('#completed-jobs-table'));
         renderProductsTable(root.querySelector('#products-table'));
         
         notify('Trabajo asignado y guardado en Firebase.');
@@ -641,21 +640,10 @@ function attachProducts(root) {
         job.data.productoId=previousProductId;
         job.data.variantId=previousVariantId;
         alert('No se pudo guardar la asignación: '+error.message);
-        renderCompletedJobs(root.querySelector('#completed-jobs-table'));
         renderProductsTable(root.querySelector('#products-table'));
       }
     }
-    if(create){
-      const job=getJob(create.dataset.createAssign);
-      const name=root.querySelector('[data-new-name="'+create.dataset.createAssign+'"]')?.value.trim();
-      const type=root.querySelector('[data-new-type="'+create.dataset.createAssign+'"]')?.value;
-      const code=root.querySelector('[data-new-code="'+create.dataset.createAssign+'"]')?.value.trim();
-      if(!job||!name||!code||!PRODUCT_TYPES.some(([prefix])=>prefix===type)){alert('Completa el nombre, tipo y código del producto.');return;}
-      if(appState.products.some(p=>String(p.codigo).toLowerCase()===code.toLowerCase())){alert('Ese código ya existe. Usa otro código.');return;}
-      const product={id:makeId('prod'),codigo:code,nombre:name,notas:'Creado desde trabajo realizado: '+job.data.nombre,tipo:type,createdAt:Date.now()};
-      appState.products.push(product);job.data.productoId=product.id;
-      saveAppState();renderManagementView(root,'products');notify('Producto creado y trabajo asignado.');
-    }
+
   });
 }
 function attachClients(root) {
