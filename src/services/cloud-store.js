@@ -123,7 +123,7 @@ async function synchronizePublicCatalog() {
     const data = job.data || {};
     const id = String(job.id);
     batch.set(doc(publicCatalogRef, id), {
-      codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase())),
+      codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase())),
       nombre: String(data.nombre || '').slice(0, 160),
       descripcion: String(data.descripcion || '').slice(0, 1200),
       imagenUrl: /^https:\/\//i.test(String(data.imagenUrl || '')) ? String(data.imagenUrl) : '',
