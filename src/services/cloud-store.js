@@ -10,6 +10,11 @@ let initialReadCompleted = false;
 let baseRevision = 0;
 let localDirty = false;
 let writeInProgress = false;
+let publicCatalogSyncError = null;
+
+export function getPublicCatalogSyncError() {
+  return publicCatalogSyncError;
+}
 
 function normalized(data = {}) {
   return {
@@ -97,8 +102,17 @@ export async function writeSharedState() {
       return revision;
     });
     baseRevision = nextRevision;
-    await synchronizePublicCatalog();
     localDirty = false;
+
+    // El documento principal ya quedó confirmado. El catálogo público es una
+    // proyección secundaria: su fallo no debe invalidar ni revertir el guardado.
+    try {
+      await synchronizePublicCatalog();
+      publicCatalogSyncError = null;
+    } catch (error) {
+      publicCatalogSyncError = error;
+      console.error('Los datos principales se guardaron, pero falló la sincronización del catálogo público:', error);
+    }
     return true;
   } finally {
     writeInProgress = false;
