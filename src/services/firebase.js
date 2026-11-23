@@ -18,7 +18,7 @@ if (isConfigured) {
   app = getApps().length ? getApps()[0] : initializeApp(config);
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
+  storage = config.storageBucket ? getStorage(app) : null;
 }
 export { app, auth, db, storage, isConfigured as isFirebaseConfigured };
 export function getFirebaseStatus() {
