@@ -401,7 +401,7 @@ function renderProductsTable(root, filters = {}) {
   const hasJobFilters=Boolean(from||to||type||status||client);
   const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es');
   const jobMatches=(job,product=null)=>{
-    const date=String(job.data?.fecha||'').slice(0,10),jobStatus=job.data?.estadoTrabajo||'realizado',jobClient=normalize(job.data?.cliente||''),jobType=String(product?.tipo||job.data?.tipoProducto||job.data?.tipo||'');
+    const date=job.data?.fecha?dateValue(job.data.fecha):'',jobStatus=job.data?.estadoTrabajo||'realizado',jobClient=normalize(job.data?.cliente||''),jobType=String(product?.tipo||job.data?.tipoProducto||job.data?.tipo||'');
     if(from&&(!date||date<from))return false;if(to&&(!date||date>to))return false;if(type&&jobType!==type)return false;if(status&&jobStatus!==status)return false;if(client&&!jobClient.includes(client))return false;
     const productText=product?normalize([product.nombre,product.codigo,product.tipo,...getProductVariants(product).flatMap(v=>[v.nombre,v.codigo])].join(' ')):'';
     const jobText=normalize([job.data?.nombre,job.data?.cliente,job.id].join(' '));
