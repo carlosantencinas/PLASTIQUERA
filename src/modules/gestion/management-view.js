@@ -426,7 +426,22 @@ function renderProductsTable(root, filters = {}) {
     const linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p));
     return hasJobFilters?linked.length>0:(productMatch||linked.length>0);
   });
-  const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')),unassigned=completed.filter(j=>!j.data?.productoId&&jobMatches(j,null));
+  // Deduplica por ID y excluye registros que no tengan la estructura de un trabajo.
+  // También reconoce los nombres alternativos de vínculo usados por versiones anteriores.
+  const uniqueJobs=new Map();
+  appState.jobs.forEach(job=>{
+    if(job?.id&&job.data&&typeof job.data==='object'&&!Array.isArray(job.data))uniqueJobs.set(String(job.id),job);
+  });
+  const completed=[...uniqueJobs.values()].filter(j=>(!j.data.estadoTrabajo||j.data.estadoTrabajo==='realizado'));
+  const hasValidProductLink=job=>{
+    const data=job?.data||{};
+    const productId=data.productoId||data.productId||data.producto?.id||job?.productoId||job?.productId;
+    if(productId&&appState.products.some(product=>String(product.id)===String(productId)))return true;
+    const productCode=data.codigoProducto||data.productCode||job?.codigoProducto||job?.productCode;
+    if(productCode&&appState.products.some(product=>String(product.codigo||'').trim().toLocaleLowerCase('es')===String(productCode).trim().toLocaleLowerCase('es')))return true;
+    return false;
+  };
+  const unassigned=completed.filter(job=>!hasValidProductLink(job)&&jobMatches(job,null));
   const cards=products.map(p=>{
     const st=stockFor(p.id),vs=getProductVariants(p),productBarcode=barcodeImageSource(p.codigo),linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p));
     const jobRows=linked.map(j=>{
@@ -512,7 +527,7 @@ function openProductDialog(root, product=null) {
     <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
     <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
     <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
-    <div class="product-image-editor"><label class="management-field">Imagen de vista previa<input name="imagen" type="file" accept="image/*"><small>Se optimiza y queda disponible en tus otros dispositivos.</small></label><div class="product-image-preview" data-product-image-preview>${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div></div><label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
+    <div class="product-image-editor"><label class="management-field">Imagen de vista previa<input name="imagen" type="file" accept="image/*"><small>Además de subir un archivo, puedes copiar una imagen y pegarla aquí con Ctrl+V. Se optimiza y queda disponible en tus otros dispositivos.</small></label><div class="product-image-preview" data-product-image-preview>${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div></div><label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
     <p class="management-dialog-error" role="alert" hidden></p>
     <div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">${editing?'Guardar cambios':'Crear producto'}</button></div>
   </form>`;
@@ -521,6 +536,20 @@ function openProductDialog(root, product=null) {
   const imageInput=form.elements.imagen,imagePreview=dialog.querySelector('[data-product-image-preview]');
   let previewObjectUrl=null;
   imageInput.addEventListener('change',()=>{const file=imageInput.files?.[0];if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);if(!file){imagePreview.innerHTML=product?.imageUrl?'<img src="'+esc(product.imageUrl)+'" alt="Vista previa actual">':'<span>Sin imagen seleccionada</span>';return;}if(!file.type.startsWith('image/')){imageInput.value='';imagePreview.innerHTML='<span>Selecciona una imagen válida.</span>';return;}previewObjectUrl=URL.createObjectURL(file);imagePreview.innerHTML='<img src="'+previewObjectUrl+'" alt="Vista previa seleccionada">';});
+  dialog.addEventListener('paste',event=>{
+    const items=Array.from(event.clipboardData?.items||[]);
+    const imageItem=items.find(item=>item.kind==='file'&&item.type.startsWith('image/'));
+    const pasted=imageItem?.getAsFile();
+    if(!pasted)return;
+    event.preventDefault();
+    const extension=pasted.type==='image/jpeg'?'jpg':pasted.type==='image/webp'?'webp':pasted.type==='image/gif'?'gif':'png';
+    const file=new File([pasted],`imagen-producto-${Date.now()}.${extension}`,{type:pasted.type});
+    const transfer=new DataTransfer();
+    transfer.items.add(file);
+    imageInput.files=transfer.files;
+    imageInput.dispatchEvent(new Event('change',{bubbles:true}));
+    notify('Imagen pegada. Se guardará al actualizar el producto.');
+  });
   dialog.addEventListener('close',()=>{if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);dialog.remove();});
   const codeInput=form.elements.codigo;
   const regenerate=()=>{codeInput.value=nextProductCode(form.elements.tipo.value);};
@@ -712,7 +741,7 @@ function attachProducts(root) {
       if(!isProductCodeAvailable(code,appState.products,{kind:'product'})){alert('El código '+code+' ya está utilizado.');return;}
       const previousProductId=job.data.productoId??null;
       const previousVariantId=job.data.variantId??null;
-      const product={id:makeId('prod'),codigo:code,tipo,nombre:name,notas:'',createdAt:Date.now()};
+      const product={id:makeId('prod'),codigo:code,tipo:type,nombre:name,notas:'',createdAt:Date.now()};
       create.disabled=true;
       appState.products.push(product);
       job.data.productoId=product.id;
