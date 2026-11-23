@@ -1,4 +1,5 @@
 import { calculateJob } from '../../calculations/jobs.js';
+import { uploadProductImage } from '../../services/product-images.js';
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState } from '../../services/app-store.js';
 import { inventoryState, getMaterialById, applyJobMaterials, removeJobMaterial } from '../../services/inventory-store.js';
@@ -236,7 +237,7 @@ function renderHistory(filters = {}) {
         });
         return `
         <tr>
-          <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
+          <td><strong>${escapeText(job.data.nombre)}</strong><small>${escapeText(job.data.codigoCatalogo || 'Código pendiente')} · ${escapeText(job.data.cliente || 'Sin cliente')}</small></td>
           <td><span class="job-status job-status-${escapeText(job.data.estadoTrabajo || 'realizado')}">${statusLabels[job.data.estadoTrabajo || 'realizado'] || job.data.estadoTrabajo}</span></td>
           <td>${new Date(job.data.fecha).toLocaleDateString('es-BO')}</td>
           <td><div class="job-filament-summary"><strong>${totalGrams > 0 ? totalGrams.toLocaleString('es-BO',{maximumFractionDigits:1}) + ' g' : '—'}</strong>
@@ -248,6 +249,7 @@ function renderHistory(filters = {}) {
           <td><div class="job-actions">
             <button type="button" data-quote="${job.id}" class="job-action">Ver cotización</button>
             ${job.data.estadoTrabajo !== 'realizado' ? `<button type="button" data-mark-realized="${job.id}" class="job-action">Marcar realizado</button>` : `<button type="button" data-duplicate="${job.id}" class="job-action">Copiar a nueva cotización</button>`}
+            <button type="button" data-toggle-catalog="${job.id}" class="job-action">${job.data.publicadoCatalogo ? 'Quitar del catálogo' : 'Publicar en catálogo'}</button>
             <button type="button" data-edit="${job.id}" class="job-action">Editar</button>
             <button type="button" data-delete="${job.id}" class="job-action danger">Eliminar</button>
           </div></td>
@@ -337,6 +339,8 @@ export function renderJobsView(container) {
             <label class="job-field"><span>Cliente / solicitado por</span><input name="cliente" placeholder="Nombre del cliente"></label>
             <label class="job-field"><span>Fecha del trabajo</span><input name="fecha" type="date"></label>
             <label class="job-field job-span-2"><span>Descripción / notas</span><textarea name="descripcion" rows="2" placeholder="Color, acabado, referencias…"></textarea></label>
+            <label class="job-field job-span-2"><span>Fotografía para el catálogo (opcional)</span><input id="jobCatalogImage" type="file" accept="image/*"><small class="job-help">Se optimiza y guarda en Cloudinary. Máximo 12 MB.</small><img id="jobCatalogImagePreview" alt="Vista previa de la fotografía" hidden style="max-width:180px;max-height:140px;object-fit:cover;border-radius:12px;margin-top:8px"></label>
+            <label class="job-field job-span-2"><span><input name="publicadoCatalogo" type="checkbox"> Publicar en catálogo público</span><small class="job-help">Solo se mostrará en la página pública si activas esta opción.</small></label>
           </div>
           <div class="jobs-subheading">Tipo de registro</div>
           <div class="jobs-form-grid">
@@ -403,6 +407,8 @@ export function renderJobsView(container) {
   const filamentRoot = container.querySelector('#jobFilaments');
   const materialHelp = container.querySelector('#jobMaterialHelp');
   const historyFilters = { trabajo:'', estado:'', fecha:'', filamento:'', costo:'', precio:'', ganancia:'' };
+  let selectedJobImage = null;
+  let imagePreviewUrl = null;
 
   function filamentRowMarkup(row = {}) {
     const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
@@ -490,6 +496,13 @@ export function renderJobsView(container) {
     editingId = null;
     form.reset();
     form.elements.fecha.value = dateInput(Date.now());
+    form.elements.publicadoCatalogo.checked = false;
+    selectedJobImage = null;
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    imagePreviewUrl = null;
+    const imagePreview = container.querySelector('#jobCatalogImagePreview');
+    imagePreview.hidden = true; imagePreview.removeAttribute('src');
+    container.querySelector('#jobCatalogImage').value = '';
     const settings = appState.settings || {};
     form.elements.precioKwh.value = String(settings.precioKwh ?? 0.70);
     form.elements.tipoImpresora.value = 'Anycubic Kobra X (FDM multicolor)';
@@ -507,6 +520,14 @@ export function renderJobsView(container) {
   }
 
   form.addEventListener('input', refresh);
+  container.querySelector('#jobCatalogImage').addEventListener('change', event => {
+    selectedJobImage = event.target.files?.[0] || null;
+    const previewImage = container.querySelector('#jobCatalogImagePreview');
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    imagePreviewUrl = selectedJobImage ? URL.createObjectURL(selectedJobImage) : null;
+    previewImage.hidden = !imagePreviewUrl;
+    if (imagePreviewUrl) previewImage.src = imagePreviewUrl;
+  });
   filamentRoot.addEventListener('change', event => {
     if (event.target.matches('[data-filament-material]')) syncFilamentColor(event.target.closest('[data-filament-row]'));
     refresh();
@@ -536,10 +557,11 @@ export function renderJobsView(container) {
     refresh();
   });
 
-  form.addEventListener('submit', event => {
+  form.addEventListener('submit', async event => {
     event.preventDefault();
     const makeQuote = event.submitter?.dataset.action === 'quote';
     const { data } = values();
+    data.publicadoCatalogo = form.elements.publicadoCatalogo.checked;
     if (makeQuote) data.estadoTrabajo = 'cotizacion';
     if (!data.nombre) return;
     if (editingId) {
@@ -550,7 +572,11 @@ export function renderJobsView(container) {
       }
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+    const previousJob = editingId ? jobs.find(job => job.id === editingId) : null;
+    data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase());
+    data.imagenUrl = previousJob?.data?.imagenUrl || '';
     try {
+      if (selectedJobImage) data.imagenUrl = await uploadProductImage(selectedJobImage, jobId);
       if (data.estadoTrabajo === 'realizado') {
         applyJobMaterials(jobId, data);
       } else {
@@ -654,6 +680,17 @@ export function renderJobsView(container) {
       refresh();
       return;
     }
+    const toggleCatalogButton = event.target.closest('[data-toggle-catalog]');
+    if (toggleCatalogButton) {
+      const job = jobs.find(item => item.id === toggleCatalogButton.dataset.toggleCatalog);
+      if (!job) return;
+      job.data.publicadoCatalogo = !job.data.publicadoCatalogo;
+      job.data.codigoCatalogo ||= 'TR-' + String(job.id).replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase();
+      job.updatedAt = Date.now();
+      saveAppState();
+      refresh();
+      return;
+    }
     if (editButton) {
       const job = jobs.find(item => item.id === editButton.dataset.edit);
       if (!job) return;
@@ -664,6 +701,11 @@ export function renderJobsView(container) {
           form.elements[key].value = key === 'fecha' ? dateInput(value) : value;
         }
       });
+      form.elements.publicadoCatalogo.checked = job.data.publicadoCatalogo === true;
+      selectedJobImage = null;
+      const previewImage = container.querySelector('#jobCatalogImagePreview');
+      previewImage.hidden = !job.data.imagenUrl;
+      if (job.data.imagenUrl) previewImage.src = job.data.imagenUrl; else previewImage.removeAttribute('src');
       setFilamentRows(Array.isArray(job.data.materiales) && job.data.materiales.length ? job.data.materiales : [{ materialId: job.data.materialId || 'manual', gramos: job.data.gramos, color: '' }]);
       container.querySelector('#jobFormTitle').textContent = 'Editar trabajo';
       container.querySelector('#jobSaveButton').textContent = 'Guardar cambios';
