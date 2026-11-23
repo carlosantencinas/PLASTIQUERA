@@ -374,7 +374,7 @@ function renderCompletedJobs(root, query='') {
 function barcodeImageSource(code) {
   const value=String(code||'').trim();if(!value)return '';
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:18,fontOptions:'bold',textMargin:4,margin:0,height:66,width:2,lineColor:'#111111',background:'#ffffff'});
+  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:18,fontOptions:'bold',textMargin:4,margin:0,marginLeft:18,marginRight:18,height:66,width:2,lineColor:'#111111',background:'#ffffff'});
   svg.setAttribute('preserveAspectRatio','xMinYMin meet');
   svg.setAttribute('shape-rendering','crispEdges');
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
@@ -384,7 +384,7 @@ function downloadBarcodeSvg(code) {
   const value=String(code||'').trim();if(!value)return;
   const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
   svg.setAttribute('xmlns',ns);
-  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:22,fontOptions:'bold',textMargin:6,margin:0,height:82,width:2.4,lineColor:'#000000',background:'#ffffff'});
+  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:22,fontOptions:'bold',textMargin:6,margin:0,marginLeft:22,marginRight:22,height:82,width:2.4,lineColor:'#000000',background:'#ffffff'});
   svg.setAttribute('shape-rendering','crispEdges');
   svg.setAttribute('version','1.1');
   const serialized=new XMLSerializer().serializeToString(svg);
