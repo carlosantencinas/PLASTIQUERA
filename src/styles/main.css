@@ -1284,3 +1284,14 @@ body { background: #f5f5f2; }
 .catalog-dashboard-variant .catalog-variant-info{display:grid;gap:4px;min-width:0;flex:1}.catalog-inline-barcode.variant-barcode{width:min(100%,240px);max-height:42px}.catalog-dashboard-variant{align-items:center}
 @media(max-width:1100px){.catalog-filter-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.catalog-filter-toolbar .catalog-filter-search{grid-column:span 2}}
 @media(max-width:600px){.catalog-filter-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px;gap:8px}.catalog-filter-toolbar .catalog-filter-search{grid-column:1/-1}.catalog-filter-toolbar #catalog-clear-filters{grid-column:1/-1;width:100%}.catalog-dashboard-barcode-panel{grid-template-columns:1fr}.catalog-inline-barcode.product-barcode{max-height:58px}}
+
+
+/* Códigos de barras: SVG limpio, texto legible y descarga vectorial */
+.catalog-inline-barcode{display:block;width:auto;max-width:100%;height:auto;max-height:none;object-fit:contain;background:#fff;image-rendering:auto}
+.catalog-inline-barcode.product-barcode{width:min(100%,520px);max-height:104px}
+.catalog-inline-barcode.variant-barcode{width:min(100%,280px);max-height:70px}
+.catalog-dashboard-barcode-panel{grid-template-columns:minmax(150px,.8fr) minmax(0,1.8fr);align-items:center}
+.catalog-barcode-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.catalog-dashboard-variant .catalog-barcode-actions{flex:0 0 auto}
+.catalog-barcode-actions .management-link,.catalog-dashboard-barcode-panel .management-link{font-size:10px;padding:6px 9px}
+@media(max-width:600px){.catalog-dashboard-barcode-panel{grid-template-columns:1fr}.catalog-inline-barcode.product-barcode{max-height:90px}.catalog-dashboard-variant{align-items:flex-start}.catalog-dashboard-variant .catalog-barcode-actions{flex-direction:column;align-items:stretch}}
