@@ -1,5 +1,7 @@
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, storage } from './firebase.js';
+import { auth } from './firebase.js';
+
+const CLOUDINARY_CLOUD_NAME = 'ixkzxqpv';
+const CLOUDINARY_UPLOAD_PRESET = 'plastiqueria_productos';
 
 async function optimizedImage(file, crop = { x: 50, y: 50 }) {
   if (!(file instanceof File) || !file.type.startsWith('image/')) throw new Error('Selecciona un archivo de imagen válido.');
@@ -29,11 +31,27 @@ async function optimizedImage(file, crop = { x: 50, y: 50 }) {
 }
 
 export async function uploadProductImage(file, productId, crop = { x: 50, y: 50 }) {
-  if (!storage) throw new Error('Firebase Storage no está configurado. Verifica VITE_FIREBASE_STORAGE_BUCKET.');
-  const user = auth?.currentUser;
-  if (!user) throw new Error('Debes iniciar sesión para subir imágenes.');
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+    throw new Error('Falta configurar Cloudinary para las imágenes de productos.');
+  }
+  if (!auth?.currentUser) throw new Error('Debes iniciar sesión para subir imágenes.');
+
   const image = await optimizedImage(file, crop);
-  const imageRef = ref(storage, `product-images/${user.uid}/${productId}/preview-${Date.now()}.jpg`);
-  await uploadBytes(imageRef, image, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000' });
-  return getDownloadURL(imageRef);
+  const safeProductId = String(productId || 'producto').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
+  const formData = new FormData();
+  formData.append('file', image, `producto-${safeProductId}.jpg`);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('public_id', `producto-${safeProductId}-${Date.now()}`);
+
+  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+  const response = await fetch(endpoint, { method: 'POST', body: formData });
+  let result;
+  try { result = await response.json(); }
+  catch { throw new Error('Cloudinary respondió con un formato inesperado.'); }
+
+  if (!response.ok || !result.secure_url) {
+    const message = result?.error?.message || `Error HTTP ${response.status}`;
+    throw new Error('Cloudinary no pudo guardar la imagen: ' + message);
+  }
+  return result.secure_url;
 }
