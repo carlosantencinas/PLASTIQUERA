@@ -209,7 +209,14 @@ function dashboard() {
 function products() {
   return `<section class="management-card product-catalog-card catalog-operations-card">
     <div class="product-catalog-heading"><div><p class="eyebrow">CATÁLOGO AM3D</p><h3>Catálogo y producción</h3><p>Productos, trabajos, códigos, cantidades, ventas y reimpresiones en una sola tabla.</p></div><button type="button" class="management-button" id="catalog-add-product">+ Nuevo producto</button></div>
-    <div class="management-search-wrap"><input class="management-search" id="product-search" type="search" placeholder="Buscar producto, código, variante, trabajo o cliente…"></div>
+    <div class="catalog-filter-toolbar">
+      <label class="catalog-filter-search"><span>Buscar</span><input class="management-search" id="product-search" type="search" placeholder="Producto, código, trabajo o cliente…"></label>
+      <label><span>Desde</span><input id="catalog-date-from" type="date"></label><label><span>Hasta</span><input id="catalog-date-to" type="date"></label>
+      <label><span>Tipo</span><select id="catalog-type-filter"><option value="">Todos los tipos</option>${PRODUCT_TYPES.map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join('')}</select></label>
+      <label><span>Estado</span><select id="catalog-status-filter"><option value="">Todos los estados</option><option value="cotizacion">Cotización</option><option value="pendiente">Pendiente</option><option value="realizado">Realizado</option></select></label>
+      <label><span>Cliente</span><input id="catalog-client-filter" type="search" placeholder="Nombre del cliente"></label>
+      <button type="button" class="management-button secondary" id="catalog-clear-filters">Limpiar filtros</button>
+    </div>
     <div id="products-table" class="catalog-unified-table"></div>
   </section>`;
 }
@@ -364,6 +371,15 @@ function renderCompletedJobs(root, query='') {
     </article>`;
   }).join('');
 }
+function barcodeImageSource(code) {
+  const value=String(code||'').trim();if(!value)return '';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
+  JsBarcode(svg,value,{format:'CODE128',displayValue:false,margin:10,height:74,width:2,lineColor:'#111111',background:'#ffffff'});
+  if(!svg.getAttribute('viewBox')){const width=Number.parseFloat(svg.getAttribute('width'))||300,height=Number.parseFloat(svg.getAttribute('height'))||100;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);}
+  svg.setAttribute('width','520');svg.setAttribute('height','120');svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
+}
+
 function printProductBarcode(product, variant = null) {
   const code=String(variant?.codigo||product?.codigo||'').trim(),labelName=variant?product.nombre+' · '+variant.nombre:product?.nombre;
   if(!code){notify('Este registro no tiene un código interno.');return;}
@@ -379,29 +395,47 @@ function printProductBarcode(product, variant = null) {
   link.href=url;link.download='etiqueta-'+code.replace(/[^a-z0-9_-]/gi,'-')+'.svg';document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 
-function renderProductsTable(root, query='') {
-  const q=String(query||'').trim().toLocaleLowerCase('es');
-  const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo]),...appState.jobs.filter(j=>j.data?.productoId===p.id).flatMap(j=>[j.data?.nombre,j.data?.cliente])].join(' ').toLocaleLowerCase('es').includes(q));
-  const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')),unassigned=completed.filter(j=>!j.data?.productoId);
+function renderProductsTable(root, filters = {}) {
+  const state=typeof filters==='string'?{search:filters}:(filters||{});
+  const q=String(state.search||'').trim().toLocaleLowerCase('es'),from=String(state.from||''),to=String(state.to||''),type=String(state.type||''),status=String(state.status||''),client=String(state.client||'').trim().toLocaleLowerCase('es');
+  const hasJobFilters=Boolean(from||to||type||status||client);
+  const normalize=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es');
+  const jobMatches=(job,product=null)=>{
+    const date=String(job.data?.fecha||'').slice(0,10),jobStatus=job.data?.estadoTrabajo||'realizado',jobClient=normalize(job.data?.cliente||''),jobType=String(product?.tipo||job.data?.tipoProducto||job.data?.tipo||'');
+    if(from&&(!date||date<from))return false;if(to&&(!date||date>to))return false;if(type&&jobType!==type)return false;if(status&&jobStatus!==status)return false;if(client&&!jobClient.includes(client))return false;
+    const productText=product?normalize([product.nombre,product.codigo,product.tipo,...getProductVariants(product).flatMap(v=>[v.nombre,v.codigo])].join(' ')):'';
+    const jobText=normalize([job.data?.nombre,job.data?.cliente,job.id].join(' '));
+    return !q||productText.includes(q)||jobText.includes(q);
+  };
+  const products=appState.products.filter(p=>{
+    const productText=normalize([p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo])].join(' ')),productMatch=!q||productText.includes(q);
+    const linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p));
+    return hasJobFilters?linked.length>0:(productMatch||linked.length>0);
+  });
+  const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')),unassigned=completed.filter(j=>!j.data?.productoId&&jobMatches(j,null));
   const cards=products.map(p=>{
-    const st=stockFor(p.id),vs=getProductVariants(p),linked=appState.jobs.filter(j=>j.data?.productoId===p.id);
+    const st=stockFor(p.id),vs=getProductVariants(p),productBarcode=barcodeImageSource(p.codigo),linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p));
     const jobRows=linked.map(j=>{
-      const qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),variant=vs.find(v=>v.id===j.data?.variantId),status=j.data?.estadoTrabajo||'realizado',statusLabel=status==='realizado'?'Realizado':status==='pendiente'?'Pendiente':'Cotización';
-      return `<article class="catalog-dashboard-job"><div class="catalog-dashboard-job-title"><b>${esc(j.data?.nombre||p.nombre)}</b><span class="catalog-job-status status-${esc(status)}">${statusLabel}</span></div><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small>
+      const qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),variant=vs.find(v=>v.id===j.data?.variantId),jobStatus=j.data?.estadoTrabajo||'realizado',statusLabel=jobStatus==='realizado'?'Realizado':jobStatus==='pendiente'?'Pendiente':'Cotización';
+      return `<article class="catalog-dashboard-job"><div class="catalog-dashboard-job-title"><b>${esc(j.data?.nombre||p.nombre)}</b><span class="catalog-job-status status-${esc(jobStatus)}">${statusLabel}</span></div><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small>
       <div class="catalog-dashboard-job-metrics"><span><b>${qty}</b> prod.</span><span><b>${sold}</b> vend.</span><span><b>${available}</b> disp.</span></div>
-      <div class="catalog-dashboard-job-controls"><select data-existing-variant="${esc(j.id)}" ${!vs.length?'disabled':''} aria-label="Variante del trabajo"><option value="">${vs.length?'Sin variante':'Sin variantes'}</option>${vs.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar variante</button>${available&&status==='realizado'? `<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}${status==='realizado'? `<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button>`:''}</div>
+      <div class="catalog-dashboard-job-controls"><select data-existing-variant="${esc(j.id)}" ${!vs.length?'disabled':''} aria-label="Variante del trabajo"><option value="">${vs.length?'Sin variante':'Sin variantes'}</option>${vs.map(v=>`<option value="${esc(v.id)}" ${variant?.id===v.id?'selected':''}>${esc(v.codigo)} · ${esc(v.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar variante</button>${available&&jobStatus==='realizado'? `<button class="management-button" data-sell-job="${esc(j.id)}">Venta</button>`:''}${jobStatus==='realizado'? `<button class="management-button secondary" data-production-batch="${esc(j.id)}">Reimpresión</button>`:''}</div>
       <details class="catalog-dashboard-history"><summary>Historial de ventas y lotes</summary>${appState.sales.filter(x=>x.jobId===j.id).map(x=>`<p>${dateText(x.fecha)} · ${x.cantidad||1} unidades · ${money(x.monto)}</p>`).join('')}${(j.data.productionBatches||[]).map(x=>`<p>${dateText(x.date)} · ${x.producedQuantity} producidas · ${x.sellableQuantity} vendibles · ${x.status==='reversed'?'Revertida':'Activa'} ${x.status==='reversed'?'':`<button class="management-link danger" data-reverse-production-batch="${esc(j.id)}" data-batch-id="${esc(x.id)}">Revertir</button>`}</p>`).join('')}</details></article>`;
     }).join('');
-    const variantRows=vs.map(v=>{const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments);return `<div class="catalog-dashboard-variant"><span><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small></span><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;}).join('');
+    const variantRows=vs.map(v=>{
+      const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments),src=barcodeImageSource(v.codigo);
+      return `<div class="catalog-dashboard-variant"><span class="catalog-variant-info"><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small><img class="catalog-inline-barcode variant-barcode" src="${esc(src)}" alt="Código de barras ${esc(v.codigo)}" title="Clic derecho para copiar o guardar la imagen" loading="lazy"></span><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;
+    }).join('');
     const image=p.imageUrl?`<img class="catalog-dashboard-image" src="${esc(p.imageUrl)}" alt="Vista previa de ${esc(p.nombre)}" loading="lazy">`:'<div class="catalog-dashboard-image catalog-dashboard-image-empty"><span>＋</span><small>Añadir imagen</small></div>';
     return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
+    <div class="catalog-dashboard-barcode-panel"><div><b>Código de barras</b><small>Clic derecho sobre la imagen para copiarla o guardarla</small></div><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Clic derecho para copiar o guardar la imagen"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
     <div class="catalog-dashboard-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
     ${jobRows?`<details class="catalog-dashboard-details" open><summary>Trabajos asociados (${linked.length})</summary><div class="catalog-dashboard-jobs">${jobRows}</div></details>`:'<p class="catalog-dashboard-no-jobs">Todavía no hay trabajos asociados.</p>'}</article>`;
   }).join('');
-  const loose=unassigned.filter(j=>[j.data?.nombre,j.data?.cliente].join(' ').toLocaleLowerCase('es').includes(q)).map(j=>`<article class="catalog-unassigned-card"><div><span class="catalog-row-kind">TRABAJO SIN PRODUCTO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small></div><div class="catalog-quantities"><b>${pieces(j)}</b> piezas vendibles</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar a producto…</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} · ${esc(p.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar</button></div><details class="catalog-create-product"><summary>Crear producto desde trabajo</summary><div class="production-new-fields"><input data-new-name="${esc(j.id)}" value="${esc(j.data?.nombre||'')}" aria-label="Nombre del producto"><select data-new-type="${esc(j.id)}">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${label}</option>`).join('')}</select><input data-new-code="${esc(j.id)}" value="${nextProductCode('ACC')}" aria-label="Código del producto"><button class="management-button" data-create-assign="${esc(j.id)}">Crear y asignar</button></div></details></article>`).join('');
-  root.innerHTML=`<div class="catalog-dashboard-grid">${cards||'<p class="management-empty">No hay productos que coincidan.</p>'}</div>${loose?`<section class="catalog-unassigned-section"><h4>Casos especiales · trabajos sin producto (${unassigned.length})</h4><div class="catalog-unassigned-grid">${loose}</div></section>`:''}${!cards&&!loose?'<p class="management-empty">No hay productos ni trabajos que coincidan.</p>':''}`;
+  const loose=unassigned.map(j=>`<article class="catalog-unassigned-card"><div><span class="catalog-row-kind">TRABAJO SIN PRODUCTO</span><b>${esc(j.data?.nombre||'Trabajo')}</b><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small></div><div class="catalog-quantities"><b>${pieces(j)}</b> piezas vendibles</div><div class="catalog-assignment-controls"><select data-existing-product="${esc(j.id)}"><option value="">Asignar a producto…</option>${appState.products.map(p=>`<option value="${esc(p.id)}">${esc(p.codigo)} · ${esc(p.nombre)}</option>`).join('')}</select><button class="management-link" data-assign-existing="${esc(j.id)}">Guardar</button></div><details class="catalog-create-product"><summary>Crear producto desde trabajo</summary><div class="production-new-fields"><input data-new-name="${esc(j.id)}" value="${esc(j.data?.nombre||'')}" aria-label="Nombre del producto"><select data-new-type="${esc(j.id)}">${PRODUCT_TYPES.map(([code,label])=>`<option value="${code}">${esc(label)}</option>`).join('')}</select><input data-new-code="${esc(j.id)}" value="${nextProductCode('ACC')}" aria-label="Código del producto"><button class="management-button" data-create-assign="${esc(j.id)}">Crear y asignar</button></div></details></article>`).join('');
+  root.innerHTML=`<div class="catalog-dashboard-grid">${cards||'<p class="management-empty">No hay productos que coincidan con esos filtros.</p>'}</div>${loose?`<section class="catalog-unassigned-section"><h4>Casos especiales · trabajos sin producto (${loose.length})</h4><div class="catalog-unassigned-grid">${loose}</div></section>`:''}`;
 }
 
 function renderAssignments(root) {
@@ -521,7 +555,11 @@ function openVariantDialog(root,product) {
 
 function attachProducts(root) {
   root.querySelector('#catalog-add-product').addEventListener('click',()=>openProductDialog(root));
-  root.querySelector('#product-search').addEventListener('input',e=>renderProductsTable(root.querySelector('#products-table'),e.target.value));
+  const getFilters=()=>({search:root.querySelector('#product-search').value,from:root.querySelector('#catalog-date-from').value,to:root.querySelector('#catalog-date-to').value,type:root.querySelector('#catalog-type-filter').value,status:root.querySelector('#catalog-status-filter').value,client:root.querySelector('#catalog-client-filter').value});
+  const refresh=()=>renderProductsTable(root.querySelector('#products-table'),getFilters());
+  ['#product-search','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).addEventListener('input',refresh));
+  ['#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter'].forEach(selector=>root.querySelector(selector).addEventListener('change',refresh));
+  root.querySelector('#catalog-clear-filters').addEventListener('click',()=>{['#product-search','#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).value='');refresh();});
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
     const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
