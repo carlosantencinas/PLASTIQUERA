@@ -567,7 +567,7 @@ function openProductDialog(root, product=null) {
     if(!isProductCodeAvailable(code,appState.products,{productId:product?.id||null,kind:'product'})){error.textContent='Ese código ya está utilizado por otro producto o variante.';error.hidden=false;return;}
     const previous=product?{...product}:null;
     const record=product||{id:makeId('prod'),createdAt:Date.now()};
-    Object.assign(record,{codigo:code,tipo,nombre:name,notas:String(data.notas||'').trim()});
+    Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim()});
     const selectedImage=imageInput.files?.[0]||null;
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
