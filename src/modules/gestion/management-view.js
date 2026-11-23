@@ -384,7 +384,7 @@ function renderProductsTable(root, query='') {
   const products=appState.products.filter(p=>[p.nombre,p.codigo,p.tipo,...getProductVariants(p).flatMap(v=>[v.nombre,v.codigo]),...appState.jobs.filter(j=>j.data?.productoId===p.id).flatMap(j=>[j.data?.nombre,j.data?.cliente])].join(' ').toLocaleLowerCase('es').includes(q));
   const completed=appState.jobs.filter(j=>(!j.data?.estadoTrabajo||j.data.estadoTrabajo==='realizado')),unassigned=completed.filter(j=>!j.data?.productoId);
   const cards=products.map(p=>{
-    const st=stockFor(p.id),vs=getProductVariants(p),linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&[j.data?.nombre,j.data?.cliente,p.nombre,p.codigo].join(' ').toLocaleLowerCase('es').includes(q));
+    const st=stockFor(p.id),vs=getProductVariants(p),linked=appState.jobs.filter(j=>j.data?.productoId===p.id);
     const jobRows=linked.map(j=>{
       const qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),variant=vs.find(v=>v.id===j.data?.variantId),status=j.data?.estadoTrabajo||'realizado',statusLabel=status==='realizado'?'Realizado':status==='pendiente'?'Pendiente':'Cotización';
       return `<article class="catalog-dashboard-job"><div class="catalog-dashboard-job-title"><b>${esc(j.data?.nombre||p.nombre)}</b><span class="catalog-job-status status-${esc(status)}">${statusLabel}</span></div><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small>
