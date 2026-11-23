@@ -28,6 +28,18 @@ La sincronización utiliza transacciones y un campo de revisión (`_revision`). 
 
 La caché de interfaz de la PWA no sustituye a Firestore. Para consultar o modificar datos se requiere conexión a internet y una sesión autenticada.
 
+## Imágenes de productos (Cloudinary)
+
+Las fotografías del catálogo se optimizan en el navegador a JPEG de 640 × 640 y se cargan directamente a Cloudinary mediante un preset **Unsigned**. Firestore conserva únicamente la URL segura (`imageUrl`) junto con los demás datos del producto. Firebase Storage no se utiliza para esta función.
+
+Configuración del servicio en `src/services/product-images.js`:
+
+- Cloud name: `ixkzxqpv`
+- Upload preset: `plastiqueria_productos`
+- Carpeta de destino: `plastiqueria/productos` (definida en el preset de Cloudinary).
+
+No colocar el API Secret ni credenciales privadas en el código del navegador. Restringe el preset a formatos de imagen y establece un límite de tamaño en Cloudinary.
+
 ## Firebase
 
 La aplicación incorpora acceso por correo y contraseña, sin registro público. Las cuentas se crean desde Firebase Authentication.
