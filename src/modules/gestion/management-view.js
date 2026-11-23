@@ -456,10 +456,10 @@ function renderProductsTable(root, filters = {}) {
       return `<div class="catalog-dashboard-variant"><span class="catalog-variant-info"><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small><img class="catalog-inline-barcode variant-barcode" src="${esc(src)}" alt="Código de barras ${esc(v.codigo)}" title="Código vectorial con número legible debajo" loading="lazy"></span><span class="catalog-barcode-actions"><button type="button" class="management-link" data-download-barcode="${esc(v.codigo)}">SVG vectorial</button><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></span></div>`;
     }).join('');
     const image=p.imageUrl?`<img class="catalog-dashboard-image" src="${esc(p.imageUrl)}" alt="Vista previa de ${esc(p.nombre)}" loading="lazy">`:'<div class="catalog-dashboard-image catalog-dashboard-image-empty"><span>＋</span><small>Añadir imagen</small></div>';
-    return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
+    return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code><small>${p.publicadoCatalogo?'Publicado en catálogo':'No publicado'} · ${money(p.precioVenta)}</small>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
     <div class="catalog-dashboard-barcode-panel"><div><b>Código de barras</b><small>El número aparece debajo. Descarga el SVG para conservar la calidad vectorial en Illustrator.</small><button type="button" class="management-link" data-download-barcode="${esc(p.codigo)}">Descargar SVG vectorial</button></div><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Código vectorial con número legible debajo"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
-    <div class="catalog-dashboard-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
+    <div class="catalog-dashboard-actions"><button class="${p.publicadoCatalogo?'management-link danger':'management-button'}" data-product-toggle-catalog="${esc(p.id)}">${p.publicadoCatalogo?'Quitar del catálogo':'Publicar en catálogo'}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
     ${jobRows?`<details class="catalog-dashboard-details" open><summary>Trabajos asociados (${linked.length})</summary><div class="catalog-dashboard-jobs">${jobRows}</div></details>`:'<p class="catalog-dashboard-no-jobs">Todavía no hay trabajos asociados.</p>'}</article>`;
   }).join('');
@@ -527,7 +527,11 @@ function openProductDialog(root, product=null) {
     <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
     <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
     <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
-    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><small class="product-image-crop-hint">Vista cuadrada · arrastra para mover</small></div></div><label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
+    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><small class="product-image-crop-hint">Vista cuadrada · arrastra para mover</small></div></div>
+    <label class="management-field">Descripción para el catálogo público<textarea name="descripcionCatalogo" rows="3" maxlength="1200" placeholder="Describe el producto para tus clientes…">${esc(product?.descripcionCatalogo||'')}</textarea><small>Esta descripción será visible en la página pública; las notas internas no se publican.</small></label>
+    <label class="management-field">Precio de venta para el catálogo (Bs)<input name="precioVenta" type="number" min="0" step="0.01" value="${esc(product?.precioVenta??'')}" placeholder="Ej. 85.00"><small>Precio independiente de las cotizaciones de trabajos.</small></label>
+    <label class="management-field"><span><input name="publicadoCatalogo" type="checkbox" ${product?.publicadoCatalogo===true?'checked':''}> Publicar este producto en el catálogo público</span><small>Al activarlo, el producto y su precio serán visibles para cualquier visitante.</small></label>
+    <label class="management-field">Notas internas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
     <p class="management-dialog-error" role="alert" hidden></p>
     <div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">${editing?'Guardar cambios':'Crear producto'}</button></div>
   </form>`;
@@ -572,8 +576,13 @@ function openProductDialog(root, product=null) {
     if(!name||!code||!PRODUCT_TYPES.some(([value])=>value===type)){error.textContent='Completa el nombre, tipo y código del producto.';error.hidden=false;return;}
     if(!isProductCodeAvailable(code,appState.products,{productId:product?.id||null,kind:'product'})){error.textContent='Ese código ya está utilizado por otro producto o variante.';error.hidden=false;return;}
     const previous=product?{...product}:null;
+    const catalogPriceText=String(data.precioVenta??'').trim();
+    const catalogPrice=catalogPriceText===''?0:Number(catalogPriceText);
+    const publishToCatalog=form.elements.publicadoCatalogo.checked;
+    if(publishToCatalog&&(!Number.isFinite(catalogPrice)||catalogPrice<=0)){error.textContent='Para publicar el producto, define primero un precio de venta mayor que cero.';error.hidden=false;return;}
+    if(catalogPriceText!==''&&(!Number.isFinite(catalogPrice)||catalogPrice<0)){error.textContent='El precio de venta debe ser un número igual o mayor que cero.';error.hidden=false;return;}
     const record=product||{id:makeId('prod'),createdAt:Date.now()};
-    Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim()});
+    Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim(),descripcionCatalogo:String(data.descripcionCatalogo||'').trim(),precioVenta:catalogPrice,publicadoCatalogo:publishToCatalog});
     const selectedImage=imageInput.files?.[0]||null;
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
@@ -609,7 +618,27 @@ function attachProducts(root) {
   ['#product-search','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).addEventListener('input',refresh));
   ['#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter'].forEach(selector=>root.querySelector(selector).addEventListener('change',refresh));
   root.querySelector('#catalog-clear-filters').addEventListener('click',()=>{['#product-search','#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).value='');refresh();});
-  root.querySelector('#products-table').addEventListener('click',e=>{
+  root.querySelector('#products-table').addEventListener('click',async e=>{
+    const catalogToggle=e.target.closest('[data-product-toggle-catalog]');
+    if(catalogToggle){
+      const product=getProduct(catalogToggle.dataset.productToggleCatalog);
+      if(!product)return;
+      if(!product.publicadoCatalogo&&!(Number(product.precioVenta)>0)){alert('Edita el producto y define un precio de venta mayor que cero antes de publicarlo.');return;}
+      const previous=product.publicadoCatalogo===true;
+      product.publicadoCatalogo=!previous;
+      catalogToggle.disabled=true;
+      try{
+        const persisted=await saveAppState();
+        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+        renderManagementView(root,'products');
+        notify(product.publicadoCatalogo?'Producto publicado en el catálogo.':'Producto retirado del catálogo.');
+      }catch(error){
+        product.publicadoCatalogo=previous;
+        alert('No se pudo actualizar la publicación: '+error.message);
+        renderManagementView(root,'products');
+      }
+      return;
+    }
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
     const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]'),downloadBarcode=e.target.closest('[data-download-barcode]');
     if(downloadBarcode){downloadBarcodeSvg(downloadBarcode.dataset.downloadBarcode);return;}
