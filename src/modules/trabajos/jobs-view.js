@@ -279,7 +279,7 @@ function openQuote(job) {
   const quantity = Math.max(0, Number(data.piezasVendibles ?? 1));
   const unitPrice = quantity > 1 ? calc.precioUnitario : calc.precioVenta;
   const date = new Date(data.fecha || Date.now()).toLocaleDateString('es-BO');
-  const reference = `COT-${new Date(data.fecha || Date.now()).getFullYear()}-${String(job.id).slice(-6).toUpperCase()}`;
+  const reference = `COT-${new Date(data.fecha || Date.now()).getFullYear()}-${String(job.id).slice(-8).toUpperCase()}`;
   const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
   popup.document.open();
   popup.document.write(`<!doctype html>
@@ -573,7 +573,7 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const previousJob = editingId ? jobs.find(job => job.id === editingId) : null;
-    data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase());
+    data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase());
     data.imagenUrl = previousJob?.data?.imagenUrl || '';
     try {
       if (selectedJobImage) data.imagenUrl = await uploadProductImage(selectedJobImage, jobId);
@@ -685,7 +685,7 @@ export function renderJobsView(container) {
       const job = jobs.find(item => item.id === toggleCatalogButton.dataset.toggleCatalog);
       if (!job) return;
       job.data.publicadoCatalogo = !job.data.publicadoCatalogo;
-      job.data.codigoCatalogo ||= 'TR-' + String(job.id).replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase();
+      job.data.codigoCatalogo ||= 'TR-' + String(job.id).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();
       job.updatedAt = Date.now();
       saveAppState();
       refresh();
