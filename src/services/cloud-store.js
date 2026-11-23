@@ -1,9 +1,10 @@
-import { doc, getDoc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
 
 const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
+const publicCatalogRef = db ? collection(db, 'catalogo_publico') : null;
 const watchedFields = ['jobs','materials','purchases','sales','productos','clientes','consignaciones','expenses','jobMovements','settings'];
 let initialReadCompleted = false;
 let baseRevision = 0;
@@ -96,9 +97,40 @@ export async function writeSharedState() {
       return revision;
     });
     baseRevision = nextRevision;
+    await synchronizePublicCatalog();
     localDirty = false;
     return true;
   } finally {
     writeInProgress = false;
   }
+}
+
+
+async function synchronizePublicCatalog() {
+  if (!publicCatalogRef) return;
+  const published = appState.jobs.filter(job => job?.data?.publicadoCatalogo === true);
+  const existing = await getDocs(publicCatalogRef);
+  const publishedIds = new Set(published.map(job => String(job.id)));
+  const batch = writeBatch(db);
+  let operations = 0;
+  for (const snapshot of existing.docs) {
+    if (!publishedIds.has(snapshot.id)) {
+      batch.delete(snapshot.ref);
+      operations++;
+    }
+  }
+  for (const job of published) {
+    const data = job.data || {};
+    const id = String(job.id);
+    batch.set(doc(publicCatalogRef, id), {
+      codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-6).toUpperCase())),
+      nombre: String(data.nombre || '').slice(0, 160),
+      descripcion: String(data.descripcion || '').slice(0, 1200),
+      imagenUrl: /^https:\/\//i.test(String(data.imagenUrl || '')) ? String(data.imagenUrl) : '',
+      precioVenta: Math.max(0, Number(job.calc?.precioVenta || 0)),
+      actualizadoEn: Date.now(),
+    });
+    operations++;
+  }
+  if (operations) await batch.commit();
 }
