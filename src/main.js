@@ -6,6 +6,7 @@ import { readSharedState, writeSharedState, subscribeSharedState, markSharedStat
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
+import { renderPublicCatalog } from './modules/catalogo/public-catalog.js';
 
 const brandLogoUrl = import.meta.env.BASE_URL + 'imagotipo.svg';
 const brandIconUrl = import.meta.env.BASE_URL + 'isotipo.svg';
@@ -38,7 +39,7 @@ app.innerHTML = `
         <a class="nav-link" href="#finanzas"><span>▣</span> Finanzas</a>
         <a class="nav-link" href="#configuracion"><span>⚙</span> Configuración</a>
       </nav>
-      <div class="sidebar-footer"><span class="status-dot"></span><span id="save-status">Esperando conexión a Firebase</span></div>
+      <div class="sidebar-footer"><a class="public-catalog-shortcut" href="${import.meta.env.BASE_URL}#catalogo" target="_blank" rel="noopener">↗ Ver catálogo público</a><span class="status-dot"></span><span id="save-status">Esperando conexión a Firebase</span></div>
     </aside>
     <main class="main-content">
       <header class="topbar">
@@ -244,7 +245,9 @@ window.addEventListener('appstate:loaded',()=>{
   }
 });
 
-if(isFirebaseConfigured) {
+if(location.hash==='#catalogo') {
+  renderPublicCatalog(app);
+} else if(isFirebaseConfigured) {
   appShell.hidden=true;
   authScreen.hidden=false;
   document.querySelector('#login-form').addEventListener('submit',async event=>{
