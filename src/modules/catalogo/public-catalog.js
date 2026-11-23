@@ -25,7 +25,7 @@ export function renderPublicCatalog(root) {
       <footer class="public-catalog-footer">Agencia de Modelos 3D · Catálogo público</footer>
     </main>`;
   if (!db) {
-    root.querySelector('#publicCatalogGrid').innerHTML = '<p class="public-catalog-empty">El catálogo no está disponible en este momento.</p>';
+    root.querySelector('#publicCatalogGrid').innerHTML = '<p class="public-catalog-empty">Firebase no está configurado en esta versión de la aplicación.</p>';
     return;
   }
   let records = [];
@@ -56,8 +56,18 @@ export function renderPublicCatalog(root) {
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
     render();
   }, error => {
-    console.error('No se pudo cargar el catálogo público:', error);
-    count.textContent = 'No disponible';
-    grid.innerHTML = '<p class="public-catalog-empty">No se pudo conectar con el catálogo. Comprueba las reglas de acceso público de Firestore.</p>';
+    console.error('Error de lectura Firestore en catalogo_publico:', {
+      code: error.code, message: error.message, projectId: db.app?.options?.projectId,
+    });
+    count.textContent = 'Error de conexión';
+    const permissionDenied = error.code === 'permission-denied';
+    const explanation = permissionDenied
+      ? 'Firestore rechazó la lectura pública. En Firebase Console → Firestore Database → Reglas, publica una regla que permita read en /catalogo_publico/{trabajoId}.'
+      : 'No se pudo completar la lectura desde Firestore. Comprueba la conexión, el proyecto Firebase configurado y la consola del navegador.';
+    grid.innerHTML = `<div class="public-catalog-empty">
+      <strong>No se pudo cargar el catálogo.</strong>
+      <p>${escapeHtml(explanation)}</p>
+      <small>Código: ${escapeHtml(error.code || 'desconocido')} · Proyecto: ${escapeHtml(db.app?.options?.projectId || 'no identificado')}</small>
+    </div>`;
   });
 }
