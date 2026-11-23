@@ -135,29 +135,33 @@ async function commitCatalogOperations(operations, chunkSize = 450) {
 
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
-  const published = appState.jobs.filter(job => job?.data?.publicadoCatalogo === true);
+  // Las publicaciones nuevas pertenecen a productos, no a trabajos.
+  // Se usa un prefijo para poder retirar solo documentos administrados por este flujo.
+  // Las publicaciones antiguas de trabajos se conservan para no borrar contenido ya publicado.
+  const published = appState.products.filter(product => product?.publicadoCatalogo === true);
+  const productDocumentId = product => 'producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const publishedIds = new Set(published.map(productDocumentId));
   const existing = await getDocs(publicCatalogRef);
-  const publishedIds = new Set(published.map(job => String(job.id)));
   const operations = [];
 
   for (const snapshot of existing.docs) {
-    if (!publishedIds.has(snapshot.id)) {
+    if (snapshot.id.startsWith('producto_') && !publishedIds.has(snapshot.id)) {
       operations.push({ type: 'delete', ref: snapshot.ref });
     }
   }
 
-  for (const job of published) {
-    const data = job.data || {};
-    const id = String(job.id);
+  for (const product of published) {
+    const id = productDocumentId(product);
     operations.push({
       type: 'set',
       ref: doc(publicCatalogRef, id),
       data: {
-        codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase())),
-        nombre: String(data.nombre || '').slice(0, 160),
-        descripcion: String(data.descripcion || '').slice(0, 1200),
-        imagenUrl: /^https:\/\//i.test(String(data.imagenUrl || '')) ? String(data.imagenUrl) : '',
-        precioVenta: Math.max(0, Number(job.calc?.precioVenta || 0)),
+        tipoRegistro: 'producto',
+        codigo: String(product.codigo || '').slice(0, 80),
+        nombre: String(product.nombre || '').slice(0, 160),
+        descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
+        imagenUrl: /^https:\/\//i.test(String(product.imageUrl || '')) ? String(product.imageUrl) : '',
+        precioVenta: Math.max(0, Number(product.precioVenta || 0)),
         actualizadoEn: Date.now(),
       },
     });
