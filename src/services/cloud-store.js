@@ -105,32 +105,49 @@ export async function writeSharedState() {
   }
 }
 
+// Firestore admite como máximo 500 operaciones por WriteBatch.
+// Se usa un margen de 450 para evitar alcanzar el límite al agregar operaciones futuras.
+async function commitCatalogOperations(operations, chunkSize = 450) {
+  for (let offset = 0; offset < operations.length; offset += chunkSize) {
+    const batch = writeBatch(db);
+    const chunk = operations.slice(offset, offset + chunkSize);
+    for (const operation of chunk) {
+      if (operation.type === 'delete') batch.delete(operation.ref);
+      else batch.set(operation.ref, operation.data);
+    }
+    await batch.commit();
+  }
+}
 
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
   const published = appState.jobs.filter(job => job?.data?.publicadoCatalogo === true);
   const existing = await getDocs(publicCatalogRef);
   const publishedIds = new Set(published.map(job => String(job.id)));
-  const batch = writeBatch(db);
-  let operations = 0;
+  const operations = [];
+
   for (const snapshot of existing.docs) {
     if (!publishedIds.has(snapshot.id)) {
-      batch.delete(snapshot.ref);
-      operations++;
+      operations.push({ type: 'delete', ref: snapshot.ref });
     }
   }
+
   for (const job of published) {
     const data = job.data || {};
     const id = String(job.id);
-    batch.set(doc(publicCatalogRef, id), {
-      codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase())),
-      nombre: String(data.nombre || '').slice(0, 160),
-      descripcion: String(data.descripcion || '').slice(0, 1200),
-      imagenUrl: /^https:\/\//i.test(String(data.imagenUrl || '')) ? String(data.imagenUrl) : '',
-      precioVenta: Math.max(0, Number(job.calc?.precioVenta || 0)),
-      actualizadoEn: Date.now(),
+    operations.push({
+      type: 'set',
+      ref: doc(publicCatalogRef, id),
+      data: {
+        codigo: String(data.codigoCatalogo || ('TR-' + id.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase())),
+        nombre: String(data.nombre || '').slice(0, 160),
+        descripcion: String(data.descripcion || '').slice(0, 1200),
+        imagenUrl: /^https:\/\//i.test(String(data.imagenUrl || '')) ? String(data.imagenUrl) : '',
+        precioVenta: Math.max(0, Number(job.calc?.precioVenta || 0)),
+        actualizadoEn: Date.now(),
+      },
     });
-    operations++;
   }
-  if (operations) await batch.commit();
+
+  await commitCatalogOperations(operations);
 }
