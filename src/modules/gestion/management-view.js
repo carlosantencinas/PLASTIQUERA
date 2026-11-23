@@ -374,10 +374,24 @@ function renderCompletedJobs(root, query='') {
 function barcodeImageSource(code) {
   const value=String(code||'').trim();if(!value)return '';
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  JsBarcode(svg,value,{format:'CODE128',displayValue:false,margin:10,height:74,width:2,lineColor:'#111111',background:'#ffffff'});
-  if(!svg.getAttribute('viewBox')){const width=Number.parseFloat(svg.getAttribute('width'))||300,height=Number.parseFloat(svg.getAttribute('height'))||100;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);}
-  svg.setAttribute('width','520');svg.setAttribute('height','120');svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:18,fontOptions:'bold',textMargin:4,margin:0,height:66,width:2,lineColor:'#111111',background:'#ffffff'});
+  svg.setAttribute('preserveAspectRatio','xMinYMin meet');
+  svg.setAttribute('shape-rendering','crispEdges');
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
+}
+
+function downloadBarcodeSvg(code) {
+  const value=String(code||'').trim();if(!value)return;
+  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('xmlns',ns);
+  JsBarcode(svg,value,{format:'CODE128',displayValue:true,font:'Arial',fontSize:22,fontOptions:'bold',textMargin:6,margin:0,height:82,width:2.4,lineColor:'#000000',background:'#ffffff'});
+  svg.setAttribute('shape-rendering','crispEdges');
+  svg.setAttribute('version','1.1');
+  const serialized=new XMLSerializer().serializeToString(svg);
+  const blob=new Blob(['<?xml version="1.0" encoding="UTF-8"?>'+serialized],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download='codigo-'+value.replace(/[^a-z0-9_-]/gi,'-')+'.svg';
+  document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 
 function printProductBarcode(product, variant = null) {
@@ -424,11 +438,11 @@ function renderProductsTable(root, filters = {}) {
     }).join('');
     const variantRows=vs.map(v=>{
       const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments),src=barcodeImageSource(v.codigo);
-      return `<div class="catalog-dashboard-variant"><span class="catalog-variant-info"><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small><img class="catalog-inline-barcode variant-barcode" src="${esc(src)}" alt="Código de barras ${esc(v.codigo)}" title="Clic derecho para copiar o guardar la imagen" loading="lazy"></span><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></div>`;
+      return `<div class="catalog-dashboard-variant"><span class="catalog-variant-info"><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small><img class="catalog-inline-barcode variant-barcode" src="${esc(src)}" alt="Código de barras ${esc(v.codigo)}" title="Código vectorial con número legible debajo" loading="lazy"></span><span class="catalog-barcode-actions"><button type="button" class="management-link" data-download-barcode="${esc(v.codigo)}">SVG vectorial</button><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></span></div>`;
     }).join('');
     const image=p.imageUrl?`<img class="catalog-dashboard-image" src="${esc(p.imageUrl)}" alt="Vista previa de ${esc(p.nombre)}" loading="lazy">`:'<div class="catalog-dashboard-image catalog-dashboard-image-empty"><span>＋</span><small>Añadir imagen</small></div>';
     return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
-    <div class="catalog-dashboard-barcode-panel"><div><b>Código de barras</b><small>Clic derecho sobre la imagen para copiarla o guardarla</small></div><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Clic derecho para copiar o guardar la imagen"></div>
+    <div class="catalog-dashboard-barcode-panel"><div><b>Código de barras</b><small>El número aparece debajo. Descarga el SVG para conservar la calidad vectorial en Illustrator.</small><button type="button" class="management-link" data-download-barcode="${esc(p.codigo)}">Descargar SVG vectorial</button></div><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Código vectorial con número legible debajo"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
     <div class="catalog-dashboard-actions"><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
@@ -562,7 +576,8 @@ function attachProducts(root) {
   root.querySelector('#catalog-clear-filters').addEventListener('click',()=>{['#product-search','#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).value='');refresh();});
   root.querySelector('#products-table').addEventListener('click',e=>{
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
-    const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]');
+    const addVariant=e.target.closest('[data-variant-add]'),variantBarcode=e.target.closest('[data-variant-barcode]'),downloadBarcode=e.target.closest('[data-download-barcode]');
+    if(downloadBarcode){downloadBarcodeSvg(downloadBarcode.dataset.downloadBarcode);return;}
     if(barcode){const product=getProduct(barcode.dataset.productBarcode);if(product)printProductBarcode(product);}
     if(variantBarcode){const product=getProduct(variantBarcode.dataset.variantBarcode);const variant=getProductVariants(product).find(item=>item.id===variantBarcode.dataset.variantId);if(product&&variant)printProductBarcode(product,variant);}
     if(addVariant){
