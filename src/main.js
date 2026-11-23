@@ -2,7 +2,7 @@ import './styles/main.css';
 import { getFirebaseStatus, isFirebaseConfigured, auth } from './services/firebase.js';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { replaceAppStateFromCloud } from './services/app-store.js';
-import { readSharedState, writeSharedState, subscribeSharedState, markSharedStateDirty } from './services/cloud-store.js';
+import { readSharedState, writeSharedState, subscribeSharedState, markSharedStateDirty, getPublicCatalogSyncError } from './services/cloud-store.js';
 import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
@@ -136,8 +136,14 @@ async function syncCloud() {
     const saved=await cloudQueue;
     if(!saved) return false;
     const el=document.querySelector('#save-status');
-    if(el)el.textContent='Guardado en Firebase';
-    setStatus('Todos los cambios están guardados en Firestore.','Tiempo real activo',true);
+    const catalogError=getPublicCatalogSyncError();
+    if(catalogError) {
+      if(el)el.textContent='Datos guardados · catálogo público pendiente';
+      setStatus('Los datos del taller sí están guardados. La actualización del catálogo público falló y se reintentará en el próximo cambio.','Catálogo pendiente',false);
+    } else {
+      if(el)el.textContent='Guardado en Firebase';
+      setStatus('Todos los cambios están guardados en Firestore.','Tiempo real activo',true);
+    }
     return true;
   } catch(error) {
     // Mantener la sincronización habilitada permite reintentar en el siguiente cambio.
