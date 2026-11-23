@@ -149,77 +149,21 @@ function renderPreview(data, calc) {
 }
 
 function printProductionLabels(selectedJobs) {
-  const labels = selectedJobs.flatMap(job => {
-    const quantity = Math.max(0, Number(job.data.piezas !== undefined
-      ? Number(job.data.piezas) - Number(job.data.piezasFallidas || 0)
-      : job.data.piezasVendibles ?? 1));
-    return Array.from({ length: quantity }, (_, index) => ({
-      job, piece: index + 1, quantity,
-      code: 'PLJ' + String(job.id || '').replace(/[^a-z0-9]/gi, '').toUpperCase() + 'P' + String(index + 1).padStart(3, '0'),
-    }));
+  const labels=selectedJobs.flatMap(job=>{const quantity=Math.max(0,Number(job.data.piezas!==undefined?Number(job.data.piezas)-Number(job.data.piezasFallidas||0):job.data.piezasVendibles??1));return Array.from({length:quantity},(_,index)=>({job,piece:index+1,quantity,code:'PLJ'+String(job.id||'').replace(/[^a-z0-9]/gi,'').toUpperCase()+'P'+String(index+1).padStart(3,'0')}));});
+  if(!labels.length){window.alert('No hay piezas vendibles para generar etiquetas de producción.');return;}
+  const ns='http://www.w3.org/2000/svg',columns=3,labelWidth=70,labelHeight=40,rows=Math.ceil(labels.length/columns),svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('xmlns',ns);svg.setAttribute('width',(columns*labelWidth)+'mm');svg.setAttribute('height',(rows*labelHeight)+'mm');svg.setAttribute('viewBox',`0 0 ${columns*labelWidth} ${rows*labelHeight}`);svg.setAttribute('version','1.1');
+  const addText=(group,x,y,value,size,weight='normal')=>{const node=document.createElementNS(ns,'text');node.setAttribute('x',x);node.setAttribute('y',y);node.setAttribute('text-anchor','middle');node.setAttribute('font-family','Arial,sans-serif');node.setAttribute('font-size',size);node.setAttribute('font-weight',weight);node.setAttribute('fill','#111');node.textContent=value;group.append(node);};
+  labels.forEach((item,index)=>{
+    const x=(index%columns)*labelWidth,y=Math.floor(index/columns)*labelHeight,group=document.createElementNS(ns,'g');group.setAttribute('transform',`translate(${x} ${y})`);
+    const border=document.createElementNS(ns,'rect');border.setAttribute('x','1');border.setAttribute('y','1');border.setAttribute('width','68');border.setAttribute('height','38');border.setAttribute('rx','.8');border.setAttribute('fill','#fff');border.setAttribute('stroke','#999');border.setAttribute('stroke-width','.25');group.append(border);
+    addText(group,35,7,String(item.job.data.nombre||'Producto').slice(0,48),3.4,'bold');
+    const barcode=document.createElementNS(ns,'svg');JsBarcode(barcode,item.code,{format:'CODE128',displayValue:false,margin:5,height:70,width:1.5});
+    const vb=barcode.getAttribute('viewBox');barcode.setAttribute('x','6');barcode.setAttribute('y','10');barcode.setAttribute('width','58');barcode.setAttribute('height','15');if(vb)barcode.setAttribute('viewBox',vb);barcode.setAttribute('preserveAspectRatio','xMidYMid meet');barcode.setAttribute('overflow','visible');group.append(barcode);
+    addText(group,35,32,String(item.job.data.cliente||'Producción AM3D').slice(0,48),2.6);addText(group,35,36,`Pieza ${item.piece} de ${item.quantity} · ${item.code}`,2.5);svg.append(group);
   });
-  if (!labels.length) {
-    window.alert('No hay piezas vendibles para generar etiquetas de producción.');
-    return;
-  }
-
-  // Hoja SVG vectorial: cada etiqueta mide 70 × 40 mm y se puede editar en Illustrator.
-  const ns = 'http://www.w3.org/2000/svg';
-  const columns = 3, labelWidth = 70, labelHeight = 40;
-  const rows = Math.ceil(labels.length / columns);
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('xmlns', ns);
-  svg.setAttribute('width', (columns * labelWidth) + 'mm');
-  svg.setAttribute('height', (rows * labelHeight) + 'mm');
-  svg.setAttribute('viewBox', `0 0 ${columns * labelWidth} ${rows * labelHeight}`);
-  svg.setAttribute('version', '1.1');
-
-  const addText = (group, x, y, value, size, weight = 'normal') => {
-    const node = document.createElementNS(ns, 'text');
-    node.setAttribute('x', x); node.setAttribute('y', y);
-    node.setAttribute('text-anchor', 'middle');
-    node.setAttribute('font-family', 'Arial, sans-serif');
-    node.setAttribute('font-size', size); node.setAttribute('font-weight', weight);
-    node.textContent = value;
-    group.append(node);
-  };
-
-  labels.forEach((item, index) => {
-    const x = (index % columns) * labelWidth;
-    const y = Math.floor(index / columns) * labelHeight;
-    const group = document.createElementNS(ns, 'g');
-    group.setAttribute('transform', `translate(${x} ${y})`);
-    const border = document.createElementNS(ns, 'rect');
-    border.setAttribute('x', '1'); border.setAttribute('y', '1');
-    border.setAttribute('width', '68'); border.setAttribute('height', '38');
-    border.setAttribute('fill', '#fff'); border.setAttribute('stroke', '#999');
-    border.setAttribute('stroke-dasharray', '1.2 1.2'); border.setAttribute('stroke-width', '.25');
-    group.append(border);
-    addText(group, 35, 7, String(item.job.data.nombre || 'Producto').slice(0, 48), 3.4, 'bold');
-    const barcode = document.createElementNS(ns, 'svg');
-    barcode.setAttribute('x', '6'); barcode.setAttribute('y', '10');
-    barcode.setAttribute('width', '58mm'); barcode.setAttribute('height', '17mm');
-    barcode.setAttribute('viewBox', '0 0 400 100');
-    barcode.setAttribute('preserveAspectRatio', 'none');
-    group.append(barcode);
-    try {
-      JsBarcode(barcode, item.code, { format: 'CODE128', displayValue: false, margin: 2, height: 70, width: 1.5 });
-    } catch (error) {
-      console.error('No se pudo generar el código de barras:', error);
-    }
-    addText(group, 35, 32, String(item.job.data.cliente || 'Producción AM3D').slice(0, 48), 2.6);
-    addText(group, 35, 36, `Pieza ${item.piece} de ${item.quantity} · ${item.code}`, 2.5);
-    svg.append(group);
-  });
-
-  const serialized = new XMLSerializer().serializeToString(svg);
-  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>' + serialized], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'etiquetas-produccion-AM3D.svg';
-  document.body.append(link); link.click(); link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const serialized=new XMLSerializer().serializeToString(svg),blob=new Blob(['<?xml version="1.0" encoding="UTF-8"?>'+serialized],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),link=document.createElement('a');
+  link.href=url;link.download='etiquetas-produccion-AM3D.svg';document.body.append(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 
 function renderHistory(filters = {}) {
