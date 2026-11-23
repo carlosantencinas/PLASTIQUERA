@@ -527,15 +527,21 @@ function openProductDialog(root, product=null) {
     <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
     <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
     <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
-    <div class="product-image-editor"><label class="management-field">Imagen de vista previa<input name="imagen" type="file" accept="image/*"><small>Además de subir un archivo, puedes copiar una imagen y pegarla aquí con Ctrl+V. Se optimiza y queda disponible en tus otros dispositivos.</small></label><div class="product-image-preview" data-product-image-preview>${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div></div><label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
+    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><small class="product-image-crop-hint">Vista cuadrada · arrastra para mover</small></div></div><label class="management-field">Notas<textarea name="notas" rows="3">${esc(product?.notas||'')}</textarea></label>
     <p class="management-dialog-error" role="alert" hidden></p>
     <div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">${editing?'Guardar cambios':'Crear producto'}</button></div>
   </form>`;
   const form=dialog.querySelector('form');
   const error=dialog.querySelector('.management-dialog-error');
   const imageInput=form.elements.imagen,imagePreview=dialog.querySelector('[data-product-image-preview]');
-  let previewObjectUrl=null;
-  imageInput.addEventListener('change',()=>{const file=imageInput.files?.[0];if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);if(!file){imagePreview.innerHTML=product?.imageUrl?'<img src="'+esc(product.imageUrl)+'" alt="Vista previa actual">':'<span>Sin imagen seleccionada</span>';return;}if(!file.type.startsWith('image/')){imageInput.value='';imagePreview.innerHTML='<span>Selecciona una imagen válida.</span>';return;}previewObjectUrl=URL.createObjectURL(file);imagePreview.innerHTML='<img src="'+previewObjectUrl+'" alt="Vista previa seleccionada">';});
+  let previewObjectUrl=null,cropX=50,cropY=50,dragPoint=null;
+  const paintImagePreview=source=>{imagePreview.innerHTML=source?'<img src="'+source+'" alt="Vista previa del recorte" draggable="false">':'<span>Sin imagen seleccionada</span>';const image=imagePreview.querySelector('img');if(image){image.style.objectPosition=cropX+'% '+cropY+'%';image.addEventListener('load',()=>{image.style.objectPosition=cropX+'% '+cropY+'%';},{once:true});}};
+  paintImagePreview(product?.imageUrl||null);
+  imageInput.addEventListener('change',()=>{const file=imageInput.files?.[0];if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl=null;cropX=50;cropY=50;if(!file){paintImagePreview(product?.imageUrl||null);return;}if(!file.type.startsWith('image/')){imageInput.value='';paintImagePreview(product?.imageUrl||null);return;}previewObjectUrl=URL.createObjectURL(file);paintImagePreview(previewObjectUrl);});
+  imagePreview.addEventListener('pointerdown',event=>{const image=imagePreview.querySelector('img');if(!image)return;event.preventDefault();imagePreview.setPointerCapture(event.pointerId);dragPoint={x:event.clientX,y:event.clientY,pointerId:event.pointerId};imagePreview.classList.add('is-dragging');});
+  imagePreview.addEventListener('pointermove',event=>{if(!dragPoint||dragPoint.pointerId!==event.pointerId)return;const image=imagePreview.querySelector('img');if(!image)return;const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight,ratio=(image.naturalWidth||1)/(image.naturalHeight||1),renderW=Math.max(frameW,frameH*ratio),renderH=Math.max(frameH,frameW/ratio),overflowX=renderW-frameW,overflowY=renderH-frameH,dx=event.clientX-dragPoint.x,dy=event.clientY-dragPoint.y;if(overflowX>0)cropX=Math.max(0,Math.min(100,cropX-dx/overflowX*100));if(overflowY>0)cropY=Math.max(0,Math.min(100,cropY-dy/overflowY*100));dragPoint={...dragPoint,x:event.clientX,y:event.clientY};image.style.objectPosition=cropX+'% '+cropY+'%';});
+  const stopImageDrag=event=>{if(dragPoint&&(!event||event.pointerId===dragPoint.pointerId)){dragPoint=null;imagePreview.classList.remove('is-dragging');}};
+  imagePreview.addEventListener('pointerup',stopImageDrag);imagePreview.addEventListener('pointercancel',stopImageDrag);
   dialog.addEventListener('paste',event=>{
     const items=Array.from(event.clipboardData?.items||[]);
     const imageItem=items.find(item=>item.kind==='file'&&item.type.startsWith('image/'));
@@ -572,7 +578,7 @@ function openProductDialog(root, product=null) {
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
     try{
-      if(selectedImage)record.imageUrl=await uploadProductImage(selectedImage,record.id);
+      if(selectedImage)record.imageUrl=await uploadProductImage(selectedImage,record.id,{x:cropX,y:cropY});
       const persisted=await saveAppState();
       if(!persisted)throw new Error('Firestore no confirmó el guardado.');
       dialog.close();renderManagementView(root,'products');notify(editing?'Producto actualizado.':'Producto creado con el código '+code+'.');
