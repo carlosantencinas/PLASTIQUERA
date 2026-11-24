@@ -618,8 +618,10 @@ function openProductCatalogDialog(root,product) {
     const data=job.data||{};
     const colors=Array.isArray(data.catalogoColores)?data.catalogoColores:productColors;
     const checked=data.catalogoPublicado===true;
+    const quoteAmount=Number(job.calc?.precioVenta||0);
     return '<article class="catalog-publish-job" data-catalog-job-row="'+esc(job.id)+'">'+
       '<label class="catalog-publish-job-select"><input type="checkbox" data-catalog-job="'+esc(job.id)+'" '+(checked?'checked':'')+'><span><b>'+esc(data.nombre||product.nombre)+'</b><small>'+esc(data.codigoCatalogo||'Código TR pendiente')+' · '+esc(data.cliente||'Sin cliente')+'</small></span></label>'+
+      '<p class="catalog-publish-quote-reference"><span>Monto de cotización registrado</span><strong>'+money(quoteAmount)+'</strong><small>Referencia interna; no se mostrará en el catálogo público.</small></p>'+
       '<div class="catalog-publish-job-fields">'+
         '<label class="management-field">Precio de publicación (Bs)<input type="number" min="0.01" step="0.01" data-catalog-price="'+esc(job.id)+'" value="'+esc(data.catalogoPrecioVenta??'')+'" placeholder="Ej. 85.00"></label>'+
         '<label class="management-field">Colores para esta publicación<input type="text" data-catalog-colors="'+esc(job.id)+'" value="'+esc(colors.join(', '))+'" placeholder="Rojo, azul, negro"><small>Se cargan desde las variantes del producto. Puedes editar la lista separando los colores por comas.</small></label>'+
