@@ -50,7 +50,11 @@ export function renderPublicCatalog(root) {
           ${item.otrosColoresPedido?'<p class="public-catalog-other-colors">Otros colores disponibles a pedido</p>':''}
           <strong class="public-catalog-price">${money(item.precioVenta)}</strong>
         </div>
-      </article>`).join('') : '<p class="public-catalog-empty">No hay trabajos publicados que coincidan con la búsqueda.</p>';
+      </article>`).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
+    grid.querySelectorAll('.public-catalog-image img').forEach(image => image.addEventListener('error', () => {
+      const frame = image.closest('.public-catalog-image');
+      if (frame) frame.innerHTML = '<div class="public-catalog-no-image">Imagen no disponible</div>';
+    }, { once: true }));
   };
   search.addEventListener('input', render);
   onSnapshot(collection(db, 'catalogo_publico'), snapshot => {
