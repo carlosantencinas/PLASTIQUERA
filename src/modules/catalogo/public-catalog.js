@@ -7,13 +7,18 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
+const whatsappUrl = (name = '', code = '') => {
+  const detail = name ? ` sobre ${name}${code ? ` (código ${code})` : ''}` : '';
+  const message = `Hola, vi${detail} en el catálogo de PLASTIQUERA y quisiera consultar disponibilidad y realizar una compra.`;
+  return `https://wa.me/59175433912?text=${encodeURIComponent(message)}`;
+};
 
 export function renderPublicCatalog(root) {
   root.innerHTML = `
     <main class="public-catalog-page">
       <header class="public-catalog-header">
         <a href="${import.meta.env.BASE_URL}" class="public-catalog-brand"><img src="${import.meta.env.BASE_URL}imagotipo.svg" alt="AM3D"></a>
-        <div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Catálogo de productos y trabajos</h1><p>Productos y trabajos de impresión 3D disponibles en nuestro taller.</p></div>
+        <div><p class="eyebrow">AGENCIA DE MODELOS 3D</p><h1>Catálogo de productos y trabajos</h1><p>Productos y trabajos de impresión 3D disponibles en nuestro taller.</p><a class="public-catalog-whatsapp public-catalog-whatsapp-header" href="${whatsappUrl()}" target="_blank" rel="noopener noreferrer" aria-label="Consultar o comprar por WhatsApp">Consultar o comprar por WhatsApp</a></div>
       </header>
       <section class="public-catalog-toolbar">
         <label><span>Buscar trabajos</span><input id="publicCatalogSearch" type="search" placeholder="Nombre, código o detalle…"></label>
@@ -23,6 +28,7 @@ export function renderPublicCatalog(root) {
         <div class="public-catalog-empty">Cargando productos y trabajos publicados…</div>
       </section>
       <footer class="public-catalog-footer">Agencia de Modelos 3D · Catálogo público</footer>
+      <a class="public-catalog-whatsapp-float" href="${whatsappUrl()}" target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp"><span class="public-catalog-whatsapp-icon" aria-hidden="true">◉</span><span>¿Consultas o compras?</span><strong>Escríbenos</strong></a>
     </main>`;
   if (!db) {
     root.querySelector('#publicCatalogGrid').innerHTML = '<p class="public-catalog-empty">Firebase no está configurado en esta versión de la aplicación.</p>';
@@ -49,6 +55,7 @@ export function renderPublicCatalog(root) {
           ${Array.isArray(item.colores)&&item.colores.length?'<div class="public-catalog-colors" aria-label="Colores disponibles">'+item.colores.map(color=>'<span>'+escapeHtml(color)+'</span>').join('')+'</div>':''}
           ${item.otrosColoresPedido?'<p class="public-catalog-other-colors">Otros colores disponibles a pedido</p>':''}
           <strong class="public-catalog-price">${money(item.precioVenta)}</strong>
+          <a class="public-catalog-whatsapp public-catalog-whatsapp-card" href="${escapeHtml(whatsappUrl(item.nombre, item.codigo))}" target="_blank" rel="noopener noreferrer">Consultar o comprar</a>
         </div>
       </article>`).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
     grid.querySelectorAll('.public-catalog-image img').forEach(image => image.addEventListener('error', () => {
