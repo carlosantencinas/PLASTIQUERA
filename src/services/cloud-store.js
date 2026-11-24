@@ -176,13 +176,7 @@ async function synchronizePublicCatalog() {
     const managed = data.gestionCatalogo === 'trabajos-v1' || data.gestionCatalogo === 'productos-v1';
     if (override?.visible === false || (managed && !generatedIds.has(snapshot.id))) {
       operations.push({ type: 'delete', ref: snapshot.ref });
-    } else if (override?.visible === true && !generatedIds.has(snapshot.id)) {
-      operations.push({
-        type: 'set',
-        ref: snapshot.ref,
-        data: { ...data, ...overrideFields(snapshot.id), actualizadoEn: Date.now() },
-      });
-    }
+
   }
 
   // Productos: conserva los datos de origen y superpone las ediciones públicas.
