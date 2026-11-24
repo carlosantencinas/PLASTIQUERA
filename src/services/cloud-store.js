@@ -137,9 +137,19 @@ async function commitCatalogOperations(operations, chunkSize = 450) {
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
 
-  const catalogOverrides = appState.settings?.catalogoPublicaciones && typeof appState.settings.catalogoPublicaciones === 'object' ? appState.settings.catalogoPublicaciones : {};\n  const overrideFields = id => { const fields = catalogOverrides[id]?.fields; return fields && typeof fields === 'object' ? fields : {}; };\n  const publishedProducts = appState.products.filter(product => product?.publicadoCatalogo === true && catalogOverrides['producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_')]?.visible !== false);
+  const catalogOverrides = appState.settings?.catalogoPublicaciones && typeof appState.settings.catalogoPublicaciones === 'object'
+    ? appState.settings.catalogoPublicaciones : {};
+  const overrideFields = id => {
+    const fields = catalogOverrides[id]?.fields;
+    return fields && typeof fields === 'object' ? fields : {};
+  };
   const productDocumentId = product => 'producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const publishedJobs = appState.jobs.filter(job => job?.data?.catalogoPublicado === true && catalogOverrides['trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_')]?.visible !== false);
+  const documentId = job => 'trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const publishedProducts = appState.products.filter(product =>
+    product?.publicadoCatalogo === true && catalogOverrides[productDocumentId(product)]?.visible !== false);
+  const publishedJobs = appState.jobs.filter(job =>
+    job?.data?.catalogoPublicado === true && catalogOverrides[documentId(job)]?.visible !== false);
+
   const productForJob = job => {
     const data = job?.data || {};
     const productId = data.catalogoProductoId || data.productoId || data.productId ||
@@ -153,25 +163,29 @@ async function synchronizePublicCatalog() {
       ? appState.products.find(product => String(product.codigo || '').trim().toLocaleLowerCase('es') === String(productCode).trim().toLocaleLowerCase('es'))
       : null;
   };
-  const documentId = job => 'trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_');
   const eligibleJobs = publishedJobs.filter(job => Boolean(productForJob(job)));
-  const publishedIds = new Set([
-    ...publishedProducts.map(productDocumentId),
-    ...eligibleJobs.map(documentId),
-  ]);
+  const generatedIds = new Set([...publishedProducts.map(productDocumentId), ...eligibleJobs.map(documentId)]);
   const existing = await getDocs(publicCatalogRef);
+  const existingById = new Map(existing.docs.map(snapshot => [snapshot.id, snapshot.data() || {}]));
   const operations = [];
 
-  // Retira únicamente documentos administrados por esta sincronización que dejaron de publicarse.
+  // Retira documentos gestionados que ya no están publicados y aplica las retiradas manuales.
   for (const snapshot of existing.docs) {
     const data = snapshot.data() || {};
+    const override = catalogOverrides[snapshot.id];
     const managed = data.gestionCatalogo === 'trabajos-v1' || data.gestionCatalogo === 'productos-v1';
-    if (managed && !publishedIds.has(snapshot.id)) {
+    if (override?.visible === false || (managed && !generatedIds.has(snapshot.id))) {
       operations.push({ type: 'delete', ref: snapshot.ref });
+    } else if (override?.visible === true && !generatedIds.has(snapshot.id)) {
+      operations.push({
+        type: 'set',
+        ref: snapshot.ref,
+        data: { ...data, ...overrideFields(snapshot.id), actualizadoEn: Date.now() },
+      });
     }
   }
 
-  // Productos publicados: la imagen se toma de imageUrl, que contiene la URL segura de Cloudinary.
+  // Productos: conserva los datos de origen y superpone las ediciones públicas.
   for (const product of publishedProducts) {
     const id = productDocumentId(product);
     const colors = getProductVariants(product)
@@ -179,26 +193,23 @@ async function synchronizePublicCatalog() {
       .map(variant => String(variant.nombre || '').trim())
       .filter(Boolean);
     const imageUrl = String(product.imageUrl || '').trim();
-    operations.push({
-      type: 'set',
-      ref: doc(publicCatalogRef, id),
-      data: {
-        tipoRegistro: 'producto',
-        gestionCatalogo: 'productos-v1',
-        codigo: String(product.codigo || '').slice(0, 80),
-        nombre: String(product.nombre || 'Producto').slice(0, 160),
-        descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
-        imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
-        precioVenta: Math.max(0, Number(product.precioVenta || 0)),
-        colores: [...new Set(colors)].slice(0, 30),
-        otrosColoresPedido: false,
-        productoNombre: String(product.nombre || '').slice(0, 160),
-        actualizadoEn: Date.now(),
-      },
-    });
+    const base = {
+      tipoRegistro: 'producto',
+      gestionCatalogo: 'productos-v1',
+      codigo: String(product.codigo || '').slice(0, 80),
+      nombre: String(product.nombre || 'Producto').slice(0, 160),
+      descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
+      imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      precioVenta: Math.max(0, Number(product.precioVenta || 0)),
+      colores: [...new Set(colors)].slice(0, 30),
+      otrosColoresPedido: false,
+      productoNombre: String(product.nombre || '').slice(0, 160),
+      actualizadoEn: Date.now(),
+    };
+    operations.push({ type: 'set', ref: doc(publicCatalogRef, id), data: { ...base, ...overrideFields(id) } });
   }
 
-  // Trabajos publicados: heredan siempre la fotografía Cloudinary del producto vinculado.
+  // Trabajos: la fotografía se hereda del producto vinculado.
   for (const job of eligibleJobs) {
     const data = job.data || {};
     const product = productForJob(job);
@@ -207,20 +218,35 @@ async function synchronizePublicCatalog() {
       ? [...new Set(data.catalogoColores.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30)
       : [];
     const imageUrl = String(product.imageUrl || '').trim();
+    const base = {
+      tipoRegistro: 'trabajo',
+      gestionCatalogo: 'trabajos-v1',
+      codigo: String(data.codigoCatalogo || '').slice(0, 80),
+      nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
+      descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
+      imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
+      colores,
+      otrosColoresPedido: data.catalogoOtrosColores !== false,
+      productoNombre: String(product.nombre || '').slice(0, 160),
+      actualizadoEn: Date.now(),
+    };
+    operations.push({ type: 'set', ref: doc(publicCatalogRef, id), data: { ...base, ...overrideFields(id) } });
+  }
+
+  // Publicaciones antiguas sin producto/trabajo de origen también se pueden editar y reactivar.
+  for (const [id, override] of Object.entries(catalogOverrides)) {
+    if (override?.visible !== true || generatedIds.has(id)) continue;
+    const previous = existingById.get(id) || {};
+    const fields = overrideFields(id);
     operations.push({
       type: 'set',
       ref: doc(publicCatalogRef, id),
       data: {
-        tipoRegistro: 'trabajo',
-        gestionCatalogo: 'trabajos-v1',
-        codigo: String(data.codigoCatalogo || '').slice(0, 80),
-        nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
-        descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
-        imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
-        precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
-        colores,
-        otrosColoresPedido: data.catalogoOtrosColores !== false,
-        productoNombre: String(product.nombre || '').slice(0, 160),
+        ...previous,
+        ...fields,
+        gestionCatalogo: previous.gestionCatalogo || 'edicion-manual-v1',
+        tipoRegistro: fields.tipoRegistro || previous.tipoRegistro || 'producto',
         actualizadoEn: Date.now(),
       },
     });
