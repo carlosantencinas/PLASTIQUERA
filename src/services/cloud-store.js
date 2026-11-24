@@ -175,7 +175,7 @@ async function synchronizePublicCatalog() {
         descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
         imagenUrl: /^https:\/\//i.test(String(product.imageUrl || '')) ? String(product.imageUrl) : '',
         precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
-        colores,
+        colores: colors,
         otrosColoresPedido: data.catalogoOtrosColores !== false,
         productoNombre: String(product.nombre || '').slice(0, 160),
         actualizadoEn: Date.now(),
