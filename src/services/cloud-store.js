@@ -229,8 +229,12 @@ async function synchronizePublicCatalog() {
   }
 
   // Publicaciones antiguas sin producto/trabajo de origen también se pueden editar y reactivar.
+  const sourceIds = new Set([
+    ...appState.products.map(productDocumentId),
+    ...appState.jobs.map(documentId),
+  ]);
   for (const [id, override] of Object.entries(catalogOverrides)) {
-    if (override?.visible !== true || generatedIds.has(id)) continue;
+    if (override?.visible !== true || generatedIds.has(id) || sourceIds.has(id)) continue;
     const previous = existingById.get(id) || {};
     const fields = overrideFields(id);
     operations.push({
