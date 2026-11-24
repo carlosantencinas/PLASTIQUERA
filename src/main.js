@@ -7,6 +7,7 @@ import { renderJobsView } from './modules/trabajos/jobs-view.js';
 import { renderInventoryView } from './modules/inventario/inventory-view.js';
 import { renderManagementView } from './modules/gestion/management-view.js';
 import { renderPublicCatalog } from './modules/catalogo/public-catalog.js';
+import { renderCatalogManagement } from './modules/catalogo/catalog-management.js';
 
 const brandLogoUrl = import.meta.env.BASE_URL + 'imagotipo.svg';
 const brandIconUrl = import.meta.env.BASE_URL + 'isotipo.svg';
@@ -31,6 +32,7 @@ app.innerHTML = `
         <a class="nav-link" href="#inicio"><span>▦</span> Panel principal</a>
         <a class="nav-link" href="#trabajos"><span>▤</span> Trabajos</a>
         <a class="nav-link" href="#productos"><span>◇</span> Productos</a>
+        <a class="nav-link" href="#catalogo-gestion"><span>▣</span> Gestionar catálogo</a>
         <a class="nav-link" href="#inventario"><span>▥</span> Inventario</a>
         <a class="nav-link" href="#compras"><span>＋</span> Compras</a>
         <a class="nav-link" href="#ventas"><span>↗</span> Ventas</a>
@@ -49,6 +51,7 @@ app.innerHTML = `
       <section id="jobs-root" hidden></section>
       <section id="inventory-root" hidden></section>
       <section id="management-root"></section>
+      <section id="catalog-management-root" hidden></section>
       <section class="connection-panel"><div><p class="eyebrow">SERVICIOS</p><h2>Estado de almacenamiento</h2><p id="firebase-status"></p></div><span id="firebase-indicator" class="connection-indicator"></span></section>
       <footer class="page-footer">Agencia de Modelos 3D <span>·</span> Sistema de gestión para impresión 3D</footer>
     </main>
@@ -58,6 +61,7 @@ const appShell=document.querySelector('#app-shell');
 const jobsRoot=document.querySelector('#jobs-root');
 const inventoryRoot=document.querySelector('#inventory-root');
 const managementRoot=document.querySelector('#management-root');
+const catalogManagementRoot=document.querySelector('#catalog-management-root');
 const statusText=document.querySelector('#firebase-status');
 const statusBadge=document.querySelector('#firebase-indicator');
 let cloudSyncEnabled=false;
@@ -85,12 +89,17 @@ function navigate(hash) {
     consignaciones:['management','consignments','Consignaciones'],
     finanzas:['management','finance','Finanzas'],
     configuracion:['management','settings','Configuración'],
+    'catalogo-gestion':['catalog',null,'Gestionar catálogo'],
   };
   const route=routes[key]||routes.inicio;
   currentRoute=key;
   jobsRoot.hidden=route[0]!=='jobs';
   inventoryRoot.hidden=route[0]!=='inventory';
   managementRoot.hidden=route[0]!=='management';
+  catalogManagementRoot.hidden=route[0]!=='catalog';
+  if(route[0]==='catalog') {
+    renderCatalogManagement(catalogManagementRoot).catch(error=>showModuleError(catalogManagementRoot,'Catálogo',error));
+  }
   if(route[0]==='management') {
     try {
       renderManagementView(managementRoot,route[1]);
