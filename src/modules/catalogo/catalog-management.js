@@ -104,6 +104,7 @@ function openEditor(root,record) {
       dialog.close();
       await loadRecords();
       renderList(root);
+      root.querySelector('#catalog-admin-feedback').hidden=false;
       root.querySelector('#catalog-admin-feedback').textContent='Publicación actualizada y sincronizada.';
     } catch(err) {
       overrides()[record.id]=previous;
@@ -137,7 +138,6 @@ export async function renderCatalogManagement(root) {
       const nextVisible=archived;
       if(!confirm(nextVisible?'¿Volver a publicar esta ficha?':'¿Retirar esta publicación del catálogo público? El producto y el trabajo original se conservarán.'))return;
       const previous=JSON.parse(JSON.stringify(overrides()[record.id]||{}));
-      const source=appState.products.some(item=>'producto_'+String(item.id).replace(/[^a-zA-Z0-9_-]/g,'_')===record.id)||appState.jobs.some(item=>'trabajo_'+String(item.id).replace(/[^a-zA-Z0-9_-]/g,'_')===record.id);
       overrides()[record.id]={...previous,visible:nextVisible,fields:safeFields(previous.fields||record)};
       setSourcePublished(record.id,nextVisible);
       try {
