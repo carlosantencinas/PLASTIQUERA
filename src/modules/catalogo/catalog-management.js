@@ -4,7 +4,7 @@ import { appState, saveAppState } from '../../services/app-store.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
-const fields = ['tipoRegistro','codigo','nombre','descripcion','imagenUrl','precioVenta','colores','otrosColoresPedido','productoNombre'];
+const fields = ['tipoRegistro','codigo','nombre','descripcion','precioVenta','colores','otrosColoresPedido','productoNombre'];
 let records = [];
 
 function overrides() {
@@ -66,13 +66,12 @@ function openEditor(root,record) {
   const dialog=document.createElement('dialog');
   dialog.className='management-form-dialog catalog-admin-dialog';
   const colors=Array.isArray(record.colores)?record.colores.join(', '):'';
-  dialog.innerHTML='<form class="management-dialog-form"><div class="management-dialog-heading"><div><p class="eyebrow">GESTIÓN DEL CATÁLOGO</p><h3>Editar publicación</h3><p>Los cambios afectan la ficha pública, no el costo ni el historial del taller.</p></div><button type="button" class="management-dialog-close" data-close>×</button></div><label class="management-field">Nombre público<input name="nombre" maxlength="160" required></label><label class="management-field">Código visible<input name="codigo" maxlength="80"></label><label class="management-field">Descripción pública<textarea name="descripcion" rows="4" maxlength="1200"></textarea></label><div class="management-form-row"><label class="management-field">Precio público (Bs)<input name="precioVenta" type="number" min="0" step="0.01" required></label><label class="management-field">Imagen (URL https)<input name="imagenUrl" type="url" placeholder="https://..."></label></div><label class="management-field">Colores disponibles<input name="colores" placeholder="Negro, blanco, rojo"><small>Separa los colores con comas.</small></label><label class="catalog-publish-other-colors"><input name="otrosColoresPedido" type="checkbox"> Mostrar «Otros colores disponibles a pedido»</label><p class="management-dialog-error" hidden role="alert"></p><div class="management-dialog-actions"><button type="button" class="management-button secondary" data-close>Cancelar</button><button type="submit" class="management-button">Guardar cambios</button></div></form>';
+  dialog.innerHTML='<form class="management-dialog-form"><div class="management-dialog-heading"><div><p class="eyebrow">GESTIÓN DEL CATÁLOGO</p><h3>Editar publicación</h3><p>Los cambios afectan la ficha pública, no el costo ni el historial del taller.</p></div><button type="button" class="management-dialog-close" data-close>×</button></div><label class="management-field">Nombre público<input name="nombre" maxlength="160" required></label><label class="management-field">Código visible<input name="codigo" maxlength="80"></label><label class="management-field">Descripción pública<textarea name="descripcion" rows="4" maxlength="1200"></textarea></label><label class="management-field">Precio público (Bs)<input name="precioVenta" type="number" min="0" step="0.01" required></label><p class="catalog-image-note">La fotografía se toma del producto registrado en PLASTIQUERA. Para cambiarla, edita la imagen del producto.</p><label class="management-field">Colores disponibles<input name="colores" placeholder="Negro, blanco, rojo"><small>Separa los colores con comas.</small></label><label class="catalog-publish-other-colors"><input name="otrosColoresPedido" type="checkbox"> Mostrar «Otros colores disponibles a pedido»</label><p class="management-dialog-error" hidden role="alert"></p><div class="management-dialog-actions"><button type="button" class="management-button secondary" data-close>Cancelar</button><button type="submit" class="management-button">Guardar cambios</button></div></form>';
   const form=dialog.querySelector('form');
   form.elements.nombre.value=record.nombre||'';
   form.elements.codigo.value=record.codigo||'';
   form.elements.descripcion.value=record.descripcion||'';
   form.elements.precioVenta.value=Number(record.precioVenta||0);
-  form.elements.imagenUrl.value=record.imagenUrl||'';
   form.elements.colores.value=colors;
   form.elements.otrosColoresPedido.checked=record.otrosColoresPedido===true;
   dialog.querySelectorAll('[data-close]').forEach(button=>button.addEventListener('click',()=>dialog.close()));
@@ -80,9 +79,7 @@ function openEditor(root,record) {
     event.preventDefault();
     const error=dialog.querySelector('.management-dialog-error');
     const price=Number(form.elements.precioVenta.value);
-    const image=String(form.elements.imagenUrl.value||'').trim();
     if(!Number.isFinite(price)||price<0){error.textContent='El precio debe ser un valor válido.';error.hidden=false;return;}
-    if(image&&!/^https:\/\//i.test(image)){error.textContent='La imagen debe utilizar una dirección HTTPS.';error.hidden=false;return;}
     const previous=JSON.parse(JSON.stringify(overrides()[record.id]||{}));
     const nextFields=safeFields({
       tipoRegistro:record.tipoRegistro||'producto',
@@ -90,7 +87,6 @@ function openEditor(root,record) {
       nombre:form.elements.nombre.value.trim(),
       descripcion:form.elements.descripcion.value.trim(),
       precioVenta:price,
-      imagenUrl:image,
       colores:form.elements.colores.value.split(',').map(x=>x.trim()).filter(Boolean),
       otrosColoresPedido:form.elements.otrosColoresPedido.checked,
       productoNombre:record.productoNombre||record.nombre||'',
