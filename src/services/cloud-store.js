@@ -135,33 +135,49 @@ async function commitCatalogOperations(operations, chunkSize = 450) {
 
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
-  // Las publicaciones nuevas pertenecen a productos, no a trabajos.
-  // Se usa un prefijo para poder retirar solo documentos administrados por este flujo.
-  // Las publicaciones antiguas de trabajos se conservan para no borrar contenido ya publicado.
-  const published = appState.products.filter(product => product?.publicadoCatalogo === true);
-  const productDocumentId = product => 'producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const publishedIds = new Set(published.map(productDocumentId));
+  const publishedJobs = appState.jobs.filter(job => job?.data?.catalogoPublicado === true);
+  const productForJob = job => {
+    const productId = job?.data?.catalogoProductoId || job?.data?.productoId;
+    return appState.products.find(product => String(product.id) === String(productId));
+  };
+  const documentId = job => 'trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const eligibleJobs = publishedJobs.filter(job => {
+    const product = productForJob(job);
+    return product && /^https:\/\//i.test(String(product.imageUrl || ''));
+  });
+  const publishedIds = new Set(eligibleJobs.map(documentId));
   const existing = await getDocs(publicCatalogRef);
   const operations = [];
 
+  // Solo se administran los documentos creados por este flujo nuevo.
+  // Los documentos de productos y las publicaciones históricas de trabajos se conservan.
   for (const snapshot of existing.docs) {
-    if (snapshot.id.startsWith('producto_') && !publishedIds.has(snapshot.id)) {
+    if (snapshot.id.startsWith('trabajo_') && snapshot.data()?.gestionCatalogo === 'trabajos-v1' && !publishedIds.has(snapshot.id)) {
       operations.push({ type: 'delete', ref: snapshot.ref });
     }
   }
 
-  for (const product of published) {
-    const id = productDocumentId(product);
+  for (const job of eligibleJobs) {
+    const data = job.data || {};
+    const product = productForJob(job);
+    const id = documentId(job);
+    const colors = Array.isArray(data.catalogoColores)
+      ? [...new Set(data.catalogoColores.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30)
+      : [];
     operations.push({
       type: 'set',
       ref: doc(publicCatalogRef, id),
       data: {
-        tipoRegistro: 'producto',
-        codigo: String(product.codigo || '').slice(0, 80),
-        nombre: String(product.nombre || '').slice(0, 160),
-        descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
+        tipoRegistro: 'trabajo',
+        gestionCatalogo: 'trabajos-v1',
+        codigo: String(data.codigoCatalogo || '').slice(0, 80),
+        nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
+        descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
         imagenUrl: /^https:\/\//i.test(String(product.imageUrl || '')) ? String(product.imageUrl) : '',
-        precioVenta: Math.max(0, Number(product.precioVenta || 0)),
+        precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
+        colores,
+        otrosColoresPedido: data.catalogoOtrosColores !== false,
+        productoNombre: String(product.nombre || '').slice(0, 160),
         actualizadoEn: Date.now(),
       },
     });

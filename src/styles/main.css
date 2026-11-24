@@ -1335,3 +1335,28 @@ body { background: #f5f5f2; }
 .public-catalog-empty{grid-column:1/-1;padding:35px 20px;text-align:center;color:#687080;background:#fff;border:1px dashed #d8dce5;border-radius:16px}
 .public-catalog-footer{max-width:1200px;margin:36px auto 0;padding:20px 0;border-top:1px solid #e0e3ea;text-align:center;color:#7b8290;font-size:12px}
 @media(max-width:600px){.public-catalog-header{align-items:flex-start;gap:14px;padding:18px}.public-catalog-brand img{width:82px}.public-catalog-toolbar{align-items:stretch;flex-direction:column}.public-catalog-count{align-self:flex-end}}
+
+
+/* Publicación individual de trabajos y variantes de color */
+.product-catalog-publish-dialog{width:min(820px,calc(100vw - 28px));max-height:min(92vh,900px);overflow:auto}
+.catalog-publish-product-preview{display:flex;align-items:center;gap:14px;padding:12px;border:1px solid #e5e7eb;border-radius:13px;background:#f8fafc}
+.catalog-publish-product-preview img{width:88px;height:88px;object-fit:cover;border-radius:10px;background:#e5e7eb}
+.catalog-publish-product-preview div{display:grid;gap:5px}
+.catalog-publish-product-preview b{font-size:15px}
+.catalog-publish-product-preview small{color:#64748b;font-size:12px}
+.catalog-publish-job-list{display:grid;gap:12px;margin:14px 0}
+.catalog-publish-job{padding:14px;border:1px solid #e2e8f0;border-radius:13px;background:#fff}
+.catalog-publish-job-select{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+.catalog-publish-job-select input{width:18px;height:18px;margin-top:2px;accent-color:#e30613}
+.catalog-publish-job-select span{display:grid;gap:4px}
+.catalog-publish-job-select b{font-size:14px}
+.catalog-publish-job-select small{color:#64748b;font-size:11px}
+.catalog-publish-job-fields{display:grid;grid-template-columns:minmax(150px,.7fr) minmax(220px,1.3fr);gap:12px;margin:12px 0 0 28px}
+.catalog-publish-job-fields .management-field{margin:0}
+.catalog-publish-job-fields .management-field small{display:block;margin-top:5px;color:#64748b;font-size:11px;line-height:1.4}
+.catalog-publish-other-colors{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155}
+.catalog-publish-other-colors input{accent-color:#e30613}
+.public-catalog-colors{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.public-catalog-colors span{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eef2f7;color:#334155;font-size:11px;font-weight:750}
+.public-catalog-other-colors{min-height:0!important;margin:8px 0 0!important;color:#16834c!important;font-size:11px!important;font-weight:800}
+@media(max-width:600px){.catalog-publish-job-fields{grid-template-columns:1fr;margin-left:0}.catalog-publish-product-preview img{width:72px;height:72px}}

@@ -459,7 +459,7 @@ function renderProductsTable(root, filters = {}) {
     return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code><small>${p.publicadoCatalogo?'Publicado en catálogo':'No publicado'} · ${money(p.precioVenta)}</small>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
     <div class="catalog-dashboard-barcode-panel"><div><b>Código de barras</b><small>El número aparece debajo. Descarga el SVG para conservar la calidad vectorial en Illustrator.</small><button type="button" class="management-link" data-download-barcode="${esc(p.codigo)}">Descargar SVG vectorial</button></div><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Código vectorial con número legible debajo"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
-    <div class="catalog-dashboard-actions"><button class="${p.publicadoCatalogo?'management-link danger':'management-button'}" data-product-toggle-catalog="${esc(p.id)}">${p.publicadoCatalogo?'Quitar del catálogo':'Publicar en catálogo'}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
+    <div class="catalog-dashboard-actions"><button class="management-button" data-product-toggle-catalog="${esc(p.id)}">Publicar trabajos</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
     ${jobRows?`<details class="catalog-dashboard-details" open><summary>Trabajos asociados (${linked.length})</summary><div class="catalog-dashboard-jobs">${jobRows}</div></details>`:'<p class="catalog-dashboard-no-jobs">Todavía no hay trabajos asociados.</p>'}</article>`;
   }).join('');
@@ -600,6 +600,99 @@ function openProductDialog(root, product=null) {
 }
 
 
+
+function openProductCatalogDialog(root,product) {
+  const linkedJobs=appState.jobs.filter(job=>job&&job.data&&job.data.productoId===product.id);
+  if(!linkedJobs.length){
+    alert('Este producto todavía no tiene trabajos asociados. Asigna primero los trabajos al producto desde la tabla de Productos.');
+    return;
+  }
+  if(!/^https:\/\//i.test(String(product.imageUrl||''))){
+    alert('Este producto no tiene una fotografía guardada. Añade primero su imagen en Editar producto; todas sus publicaciones utilizarán esa fotografía.');
+    return;
+  }
+  const productColors=getProductVariants(product).filter(variant=>variant&&variant.activo!==false).map(variant=>String(variant.nombre||'').trim()).filter(Boolean);
+  const dialog=document.createElement('dialog');
+  dialog.className='management-form-dialog product-catalog-publish-dialog';
+  const rows=linkedJobs.map(job=>{
+    const data=job.data||{};
+    const colors=Array.isArray(data.catalogoColores)?data.catalogoColores:productColors;
+    const checked=data.catalogoPublicado===true;
+    return '<article class="catalog-publish-job" data-catalog-job-row="'+esc(job.id)+'">'+
+      '<label class="catalog-publish-job-select"><input type="checkbox" data-catalog-job="'+esc(job.id)+'" '+(checked?'checked':'')+'><span><b>'+esc(data.nombre||product.nombre)+'</b><small>'+esc(data.codigoCatalogo||'Código TR pendiente')+' · '+esc(data.cliente||'Sin cliente')+'</small></span></label>'+
+      '<div class="catalog-publish-job-fields">'+
+        '<label class="management-field">Precio de publicación (Bs)<input type="number" min="0.01" step="0.01" data-catalog-price="'+esc(job.id)+'" value="'+esc(data.catalogoPrecioVenta??'')+'" placeholder="Ej. 85.00"></label>'+
+        '<label class="management-field">Colores para esta publicación<input type="text" data-catalog-colors="'+esc(job.id)+'" value="'+esc(colors.join(', '))+'" placeholder="Rojo, azul, negro"><small>Se cargan desde las variantes del producto. Puedes editar la lista separando los colores por comas.</small></label>'+
+        '<label class="catalog-publish-other-colors"><input type="checkbox" data-catalog-others="'+esc(job.id)+'" '+(data.catalogoOtrosColores!==false?'checked':'')+'> Mostrar «Otros colores disponibles a pedido»</label>'+
+      '</div></article>';
+  }).join('');
+  dialog.innerHTML='<form method="dialog" class="management-dialog-form">'+
+    '<div class="management-dialog-heading"><div><p class="eyebrow">CATÁLOGO PÚBLICO</p><h3>Publicar trabajos</h3><p>'+esc(product.nombre)+' · La fotografía se tomará del registro del producto.</p></div><button type="button" class="management-dialog-close" data-catalog-close>×</button></div>'+
+    '<div class="catalog-publish-product-preview"><img src="'+esc(product.imageUrl)+'" alt="'+esc(product.nombre)+'"><div><b>'+esc(product.nombre)+'</b><small>'+esc(product.codigo)+' · '+(productColors.length?productColors.length+' colores/variantes registrados':'Sin colores registrados en variantes')+'</small><small>El costo interno del producto no se publica.</small></div></div>'+
+    '<p class="management-help">Selecciona los trabajos que quieres mostrar. Cada trabajo tendrá su propio precio y colores; los cambios aquí no modificarán el producto ni sus variantes originales.</p>'+
+    '<div class="catalog-publish-job-list">'+rows+'</div>'+
+    '<p class="management-dialog-error" role="alert" hidden></p>'+
+    '<div class="management-dialog-actions"><button type="button" class="management-button secondary" data-catalog-close>Cancelar</button><button type="submit" class="management-button">Guardar publicaciones</button></div>'+
+  '</form>';
+  const form=dialog.querySelector('form');
+  const error=dialog.querySelector('.management-dialog-error');
+  dialog.querySelectorAll('[data-catalog-close]').forEach(button=>button.addEventListener('click',()=>dialog.close()));
+  dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    error.hidden=true;
+    const updates=[];
+    for(const job of linkedJobs){
+      const id=String(job.id);
+      const selected=form.querySelector('[data-catalog-job="'+CSS.escape(id)+'"]')?.checked===true;
+      const priceText=String(form.querySelector('[data-catalog-price="'+CSS.escape(id)+'"]')?.value||'').trim();
+      const price=Number(priceText);
+      if(selected&&(!Number.isFinite(price)||price<=0)){
+        error.textContent='Define un precio mayor que cero para cada trabajo seleccionado.';
+        error.hidden=false;
+        return;
+      }
+      const colorsText=String(form.querySelector('[data-catalog-colors="'+CSS.escape(id)+'"]')?.value||'');
+      const colors=[...new Set(colorsText.split(',').map(value=>value.trim()).filter(Boolean))].slice(0,30);
+      updates.push({job,selected,price,colors,others:form.querySelector('[data-catalog-others="'+CSS.escape(id)+'"]')?.checked!==false});
+    }
+    const previous=updates.map(item=>({job:item.job,data:JSON.parse(JSON.stringify(item.job.data||{}))}));
+    const submit=form.querySelector('[type="submit"]');
+    submit.disabled=true;
+    submit.textContent='Guardando…';
+    try{
+      for(const item of updates){
+        const data=item.job.data||(item.job.data={});
+        data.catalogoPublicado=item.selected;
+        data.catalogoProductoId=product.id;
+        data.catalogoColores=item.colors;
+        data.catalogoOtrosColores=item.others;
+        if(item.selected){
+          data.catalogoPrecioVenta=item.price;
+          data.catalogoDescripcion=String(data.descripcion||product.descripcionCatalogo||'').trim();
+          if(!data.codigoCatalogo){
+            const suffix=String(item.job.id||'').replace(/[^a-z0-9]/gi,'').slice(-8).toUpperCase();
+            data.codigoCatalogo='TR-'+(suffix||'TRABAJO');
+          }
+        }
+        item.job.updatedAt=Date.now();
+      }
+      const persisted=await saveAppState();
+      if(!persisted)throw new Error('Firestore no confirmó el guardado.');
+      dialog.close();
+      renderManagementView(root,'products');
+      notify('Publicaciones de trabajos guardadas. La sincronización del catálogo se realiza en segundo plano.');
+    }catch(err){
+      for(const item of previous){item.job.data=item.data;}
+      alert('No se pudieron guardar las publicaciones: '+err.message);
+      submit.disabled=false;
+      submit.textContent='Guardar publicaciones';
+    }
+  });
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 function openVariantDialog(root,product) {
   const dialog=document.createElement('dialog');dialog.className='management-form-dialog product-edit-dialog';
   dialog.innerHTML=`<form method="dialog" class="management-dialog-form"><div class="management-dialog-heading"><div><p class="eyebrow">VARIANTES</p><h3>Nueva variante</h3><p>${esc(product.nombre)} · Código base ${esc(product.codigo)}</p></div><button type="button" class="management-dialog-close" data-dialog-close>×</button></div><label class="management-field">Nombre de la variante<input name="nombre" required placeholder="Ej. Negro"></label><label class="management-field">Código / SKU<div class="management-code-field"><input name="codigo" required><button type="button" class="management-button secondary" data-regenerate-variant>Generar</button></div></label><p class="management-dialog-error" role="alert" hidden></p><div class="management-dialog-actions"><button type="button" class="management-button secondary" data-dialog-close>Cancelar</button><button type="submit" class="management-button">Guardar variante</button></div></form>`;
@@ -622,21 +715,7 @@ function attachProducts(root) {
     const catalogToggle=e.target.closest('[data-product-toggle-catalog]');
     if(catalogToggle){
       const product=getProduct(catalogToggle.dataset.productToggleCatalog);
-      if(!product)return;
-      if(!product.publicadoCatalogo&&!(Number(product.precioVenta)>0)){alert('Edita el producto y define un precio de venta mayor que cero antes de publicarlo.');return;}
-      const previous=product.publicadoCatalogo===true;
-      product.publicadoCatalogo=!previous;
-      catalogToggle.disabled=true;
-      try{
-        const persisted=await saveAppState();
-        if(!persisted)throw new Error('Firestore no confirmó el guardado.');
-        renderManagementView(root,'products');
-        notify(product.publicadoCatalogo?'Producto publicado en el catálogo.':'Producto retirado del catálogo.');
-      }catch(error){
-        product.publicadoCatalogo=previous;
-        alert('No se pudo actualizar la publicación: '+error.message);
-        renderManagementView(root,'products');
-      }
+      if(product)openProductCatalogDialog(root,product);
       return;
     }
     const edit=e.target.closest('[data-product-edit]'),del=e.target.closest('[data-product-delete]'),barcode=e.target.closest('[data-product-barcode]');
