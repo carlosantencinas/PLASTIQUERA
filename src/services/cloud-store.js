@@ -152,7 +152,7 @@ async function synchronizePublicCatalog() {
   // Solo se administran los documentos creados por este flujo nuevo.
   // Los documentos de productos y las publicaciones históricas de trabajos se conservan.
   for (const snapshot of existing.docs) {
-    if (snapshot.id.startsWith('trabajo_') && !publishedIds.has(snapshot.id)) {
+    if (snapshot.id.startsWith('trabajo_') && snapshot.data()?.gestionCatalogo === 'trabajos-v1' && !publishedIds.has(snapshot.id)) {
       operations.push({ type: 'delete', ref: snapshot.ref });
     }
   }
@@ -169,6 +169,7 @@ async function synchronizePublicCatalog() {
       ref: doc(publicCatalogRef, id),
       data: {
         tipoRegistro: 'trabajo',
+        gestionCatalogo: 'trabajos-v1',
         codigo: String(data.codigoCatalogo || '').slice(0, 80),
         nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
         descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
