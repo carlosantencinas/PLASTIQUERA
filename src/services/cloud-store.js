@@ -137,9 +137,9 @@ async function commitCatalogOperations(operations, chunkSize = 450) {
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
 
-  const publishedProducts = appState.products.filter(product => product?.publicadoCatalogo === true);
+  const catalogOverrides = appState.settings?.catalogoPublicaciones && typeof appState.settings.catalogoPublicaciones === 'object' ? appState.settings.catalogoPublicaciones : {};\n  const overrideFields = id => { const fields = catalogOverrides[id]?.fields; return fields && typeof fields === 'object' ? fields : {}; };\n  const publishedProducts = appState.products.filter(product => product?.publicadoCatalogo === true && catalogOverrides['producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_')]?.visible !== false);
   const productDocumentId = product => 'producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const publishedJobs = appState.jobs.filter(job => job?.data?.catalogoPublicado === true);
+  const publishedJobs = appState.jobs.filter(job => job?.data?.catalogoPublicado === true && catalogOverrides['trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_')]?.visible !== false);
   const productForJob = job => {
     const data = job?.data || {};
     const productId = data.catalogoProductoId || data.productoId || data.productId ||
