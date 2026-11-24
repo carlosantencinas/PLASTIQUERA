@@ -50,41 +50,13 @@ jobs:
           test -f dist/icon.svg
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Remove previous Pages artifacts from reruns
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-            });
-            for (const artifact of data.artifacts.filter(item => item.name === 'github-pages')) {
-              await github.rest.actions.deleteArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: artifact.id,
-              });
-            }
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: dist
-      - name: Wait for Pages artifact to be indexed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for attempt in $(seq 1 15); do
-            count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '[.artifacts[] | select(.name == "github-pages" and .expired == false)] | length')
-            if [ "$count" -eq 1 ]; then
-              echo "El artefacto github-pages está disponible."
-              exit 0
-            fi
-            echo "Esperando indexación del artefacto (intento $attempt/15, encontrados: $count)..."
-            sleep 2
-          done
-          echo "GitHub no expuso un único artefacto github-pages después de 30 segundos."
-          exit 1
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
