@@ -580,6 +580,7 @@ function openProductDialog(root, product=null) {
     const catalogPrice=catalogPriceText===''?0:Number(catalogPriceText);
     const publishToCatalog=form.elements.publicadoCatalogo.checked;
     if(publishToCatalog&&(!Number.isFinite(catalogPrice)||catalogPrice<=0)){error.textContent='Para publicar el producto, define primero un precio de venta mayor que cero.';error.hidden=false;return;}
+    if(publishToCatalog&&!imageInput.files?.[0]&&!/^https:\/\//i.test(String(product?.imageUrl||''))){error.textContent='Para publicar el producto, primero añade su fotografía. Se guardará en Cloudinary y aparecerá en el catálogo público.';error.hidden=false;return;}
     if(catalogPriceText!==''&&(!Number.isFinite(catalogPrice)||catalogPrice<0)){error.textContent='El precio de venta debe ser un número igual o mayor que cero.';error.hidden=false;return;}
     const record=product||{id:makeId('prod'),createdAt:Date.now()};
     Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim(),descripcionCatalogo:String(data.descripcionCatalogo||'').trim(),precioVenta:catalogPrice,publicadoCatalogo:publishToCatalog});
@@ -602,7 +603,7 @@ function openProductDialog(root, product=null) {
 
 
 function openProductCatalogDialog(root,product) {
-  const linkedJobs=appState.jobs.filter(job=>job&&job.data&&job.data.productoId===product.id);
+  const linkedJobs=appState.jobs.filter(job=>job&&job.data&&String(job.data.catalogoProductoId||job.data.productoId||job.data.productId||job.data.producto?.id||'')===String(product.id));
   if(!linkedJobs.length){
     alert('Este producto todavía no tiene trabajos asociados. Asigna primero los trabajos al producto desde la tabla de Productos.');
     return;

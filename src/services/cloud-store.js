@@ -2,6 +2,7 @@ import { collection, doc, getDoc, getDocs, onSnapshot, runTransaction, writeBatc
 import { db } from './firebase.js';
 import { appState } from './app-store.js';
 import { inventoryState } from './inventory-store.js';
+import { getProductVariants } from '../calculations/product-variants.js';
 
 const sharedRef = db ? doc(db, 'plastiqueria', 'principal') : null;
 const publicCatalogRef = db ? collection(db, 'catalogo_publico') : null;
@@ -135,28 +136,69 @@ async function commitCatalogOperations(operations, chunkSize = 450) {
 
 async function synchronizePublicCatalog() {
   if (!publicCatalogRef) return;
+
+  const publishedProducts = appState.products.filter(product => product?.publicadoCatalogo === true);
+  const productDocumentId = product => 'producto_' + String(product.id).replace(/[^a-zA-Z0-9_-]/g, '_');
   const publishedJobs = appState.jobs.filter(job => job?.data?.catalogoPublicado === true);
   const productForJob = job => {
-    const productId = job?.data?.catalogoProductoId || job?.data?.productoId;
-    return appState.products.find(product => String(product.id) === String(productId));
+    const data = job?.data || {};
+    const productId = data.catalogoProductoId || data.productoId || data.productId ||
+      data.producto?.id || job?.productoId || job?.productId;
+    if (productId) {
+      const matched = appState.products.find(product => String(product.id) === String(productId));
+      if (matched) return matched;
+    }
+    const productCode = data.codigoProducto || data.productCode || job?.codigoProducto || job?.productCode;
+    return productCode
+      ? appState.products.find(product => String(product.codigo || '').trim().toLocaleLowerCase('es') === String(productCode).trim().toLocaleLowerCase('es'))
+      : null;
   };
   const documentId = job => 'trabajo_' + String(job.id).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const eligibleJobs = publishedJobs.filter(job => {
-    const product = productForJob(job);
-    return product && /^https:\/\//i.test(String(product.imageUrl || ''));
-  });
-  const publishedIds = new Set(eligibleJobs.map(documentId));
+  const eligibleJobs = publishedJobs.filter(job => Boolean(productForJob(job)));
+  const publishedIds = new Set([
+    ...publishedProducts.map(productDocumentId),
+    ...eligibleJobs.map(documentId),
+  ]);
   const existing = await getDocs(publicCatalogRef);
   const operations = [];
 
-  // Solo se administran los documentos creados por este flujo nuevo.
-  // Los documentos de productos y las publicaciones históricas de trabajos se conservan.
+  // Retira únicamente documentos administrados por esta sincronización que dejaron de publicarse.
   for (const snapshot of existing.docs) {
-    if (snapshot.id.startsWith('trabajo_') && snapshot.data()?.gestionCatalogo === 'trabajos-v1' && !publishedIds.has(snapshot.id)) {
+    const data = snapshot.data() || {};
+    const managed = data.gestionCatalogo === 'trabajos-v1' || data.gestionCatalogo === 'productos-v1';
+    if (managed && !publishedIds.has(snapshot.id)) {
       operations.push({ type: 'delete', ref: snapshot.ref });
     }
   }
 
+  // Productos publicados: la imagen se toma de imageUrl, que contiene la URL segura de Cloudinary.
+  for (const product of publishedProducts) {
+    const id = productDocumentId(product);
+    const colors = getProductVariants(product)
+      .filter(variant => variant && variant.activo !== false)
+      .map(variant => String(variant.nombre || '').trim())
+      .filter(Boolean);
+    const imageUrl = String(product.imageUrl || '').trim();
+    operations.push({
+      type: 'set',
+      ref: doc(publicCatalogRef, id),
+      data: {
+        tipoRegistro: 'producto',
+        gestionCatalogo: 'productos-v1',
+        codigo: String(product.codigo || '').slice(0, 80),
+        nombre: String(product.nombre || 'Producto').slice(0, 160),
+        descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
+        imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+        precioVenta: Math.max(0, Number(product.precioVenta || 0)),
+        colores: [...new Set(colors)].slice(0, 30),
+        otrosColoresPedido: false,
+        productoNombre: String(product.nombre || '').slice(0, 160),
+        actualizadoEn: Date.now(),
+      },
+    });
+  }
+
+  // Trabajos publicados: heredan siempre la fotografía Cloudinary del producto vinculado.
   for (const job of eligibleJobs) {
     const data = job.data || {};
     const product = productForJob(job);
@@ -164,6 +206,7 @@ async function synchronizePublicCatalog() {
     const colors = Array.isArray(data.catalogoColores)
       ? [...new Set(data.catalogoColores.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30)
       : [];
+    const imageUrl = String(product.imageUrl || '').trim();
     operations.push({
       type: 'set',
       ref: doc(publicCatalogRef, id),
@@ -173,9 +216,9 @@ async function synchronizePublicCatalog() {
         codigo: String(data.codigoCatalogo || '').slice(0, 80),
         nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
         descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
-        imagenUrl: /^https:\/\//i.test(String(product.imageUrl || '')) ? String(product.imageUrl) : '',
+        imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
         precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
-        colores: colors,
+        colores,
         otrosColoresPedido: data.catalogoOtrosColores !== false,
         productoNombre: String(product.nombre || '').slice(0, 160),
         actualizadoEn: Date.now(),
