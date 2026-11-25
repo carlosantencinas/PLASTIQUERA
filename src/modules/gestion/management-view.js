@@ -443,7 +443,7 @@ function renderProductsTable(root, filters = {}) {
   };
   const unassigned=completed.filter(job=>!hasValidProductLink(job)&&jobMatches(job,null));
   const cards=products.map(p=>{
-    const st=stockFor(p.id),vs=getProductVariants(p),productBarcode=barcodeImageSource(p.codigo),linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p)),publishedJobs=linked.filter(j=>j.data?.catalogoPublicado===true).length,publishButtonLabel=publishedJobs===linked.length?'Ya publicado':publishedJobs>0?`Publicar trabajos (${publishedJobs}/${linked.length})`:'Publicar trabajos';
+    const st=stockFor(p.id),vs=getProductVariants(p),productBarcode=barcodeImageSource(p.codigo),linked=appState.jobs.filter(j=>j.data?.productoId===p.id&&jobMatches(j,p)),publishedJobs=linked.filter(j=>j.data?.catalogoPublicado===true).length,publishButtonLabel=linked.length>0&&publishedJobs===linked.length?'Ya publicado':publishedJobs>0?`Publicar trabajos (${publishedJobs}/${linked.length})`:'Publicar trabajos';
     const jobRows=linked.map(j=>{
       const qty=pieces(j),sold=appState.sales.filter(x=>x.jobId===j.id).reduce((n,x)=>n+Number(x.cantidad||1),0),available=Math.max(0,qty-sold),variant=vs.find(v=>v.id===j.data?.variantId),jobStatus=j.data?.estadoTrabajo||'realizado',statusLabel=jobStatus==='realizado'?'Realizado':jobStatus==='pendiente'?'Pendiente':'Cotización';
       return `<article class="catalog-dashboard-job"><div class="catalog-dashboard-job-title"><b>${esc(j.data?.nombre||p.nombre)}</b><span class="catalog-job-status status-${esc(jobStatus)}">${statusLabel}</span></div><small>${esc(j.data?.cliente||'Sin cliente')} · ${dateText(j.data?.fecha)}</small>
