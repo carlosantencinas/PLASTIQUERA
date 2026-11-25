@@ -94,8 +94,9 @@ export function renderPublicCatalog(root) {
         </div>
       </article>`).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
     grid.querySelectorAll('.public-catalog-zoom').forEach(button => button.addEventListener('click', () => {
-      const index = filtered.findIndex(item => item.id === button.dataset.zoomId);
-      if (index >= 0) openLightbox(filtered, index);
+      const galleryItems = filtered.filter(item => Boolean(item.imagenUrl));
+      const index = galleryItems.findIndex(item => item.id === button.dataset.zoomId);
+      if (index >= 0) openLightbox(galleryItems, index);
     }));
     grid.querySelectorAll('.public-catalog-image img').forEach(image => image.addEventListener('error', () => {
       const frame = image.closest('.public-catalog-image');
