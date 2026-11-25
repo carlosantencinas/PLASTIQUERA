@@ -527,7 +527,7 @@ function openProductDialog(root, product=null) {
     <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
     <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
     <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
-    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><small class="product-image-crop-hint">Vista cuadrada · arrastra para mover</small></div></div>
+    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><div class="product-image-crop-controls"><label for="product-image-zoom">Zoom <output data-crop-zoom-value>100%</output><input id="product-image-zoom" type="range" min="5" max="250" step="5" value="100" data-crop-zoom></label><button type="button" class="management-link" data-crop-reset>Restablecer encuadre</button></div><small class="product-image-crop-hint">Vista cuadrada · arrastra horizontal o verticalmente. Reduce el zoom para mostrar el modelo completo.</small></div></div>
     <label class="management-field">Descripción para el catálogo público<textarea name="descripcionCatalogo" rows="3" maxlength="1200" placeholder="Describe el producto para tus clientes…">${esc(product?.descripcionCatalogo||'')}</textarea><small>Esta descripción será visible en la página pública; las notas internas no se publican.</small></label>
     <label class="management-field">Precio de venta para el catálogo (Bs)<input name="precioVenta" type="number" min="0" step="0.01" value="${esc(product?.precioVenta??'')}" placeholder="Ej. 85.00"><small>Precio independiente de las cotizaciones de trabajos.</small></label>
     <label class="management-field"><span><input name="publicadoCatalogo" type="checkbox" ${product?.publicadoCatalogo===true?'checked':''}> Publicar este producto en el catálogo público</span><small>Al activarlo, el producto y su precio serán visibles para cualquier visitante.</small></label>
@@ -538,12 +538,62 @@ function openProductDialog(root, product=null) {
   const form=dialog.querySelector('form');
   const error=dialog.querySelector('.management-dialog-error');
   const imageInput=form.elements.imagen,imagePreview=dialog.querySelector('[data-product-image-preview]');
-  let previewObjectUrl=null,cropX=50,cropY=50,dragPoint=null;
-  const paintImagePreview=source=>{imagePreview.innerHTML=source?'<img src="'+source+'" alt="Vista previa del recorte" draggable="false">':'<span>Sin imagen seleccionada</span>';const image=imagePreview.querySelector('img');if(image){image.style.objectPosition=cropX+'% '+cropY+'%';image.addEventListener('load',()=>{image.style.objectPosition=cropX+'% '+cropY+'%';},{once:true});}};
+  let previewObjectUrl=null,cropX=50,cropY=50,cropZoom=1,dragPoint=null;
+  const zoomInput=dialog.querySelector('[data-crop-zoom]');
+  const zoomValue=dialog.querySelector('[data-crop-zoom-value]');
+  const updateCropPreview=()=>{
+    const image=imagePreview.querySelector('img');
+    if(!image||!image.naturalWidth||!image.naturalHeight)return;
+    const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight;
+    const cropSide=Math.min(image.naturalWidth,image.naturalHeight)/cropZoom;
+    const scale=frameW/cropSide;
+    const sourceX=(image.naturalWidth-cropSide)*cropX/100;
+    const sourceY=(image.naturalHeight-cropSide)*cropY/100;
+    image.style.position='absolute';
+    image.style.maxWidth='none';image.style.maxHeight='none';
+    image.style.width=(image.naturalWidth*scale)+'px';
+    image.style.height=(image.naturalHeight*scale)+'px';
+    image.style.left=(-sourceX*scale)+'px';
+    image.style.top=(-sourceY*scale)+'px';
+  };
+  const paintImagePreview=source=>{
+    imagePreview.innerHTML=source?'<img src="'+source+'" alt="Vista previa del recorte" draggable="false">':'<span>Sin imagen seleccionada</span>';
+    const image=imagePreview.querySelector('img');
+    if(image){image.addEventListener('load',updateCropPreview,{once:true});if(image.complete)updateCropPreview();}
+  };
+  const updateZoomControl=()=>{zoomInput.value=String(Math.round(cropZoom*100));zoomValue.textContent=Math.round(cropZoom*100)+'%';};
+  const resetCrop=()=>{cropX=50;cropY=50;cropZoom=1;updateZoomControl();updateCropPreview();};
   paintImagePreview(product?.imageUrl||null);
-  imageInput.addEventListener('change',()=>{const file=imageInput.files?.[0];if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);previewObjectUrl=null;cropX=50;cropY=50;if(!file){paintImagePreview(product?.imageUrl||null);return;}if(!file.type.startsWith('image/')){imageInput.value='';paintImagePreview(product?.imageUrl||null);return;}previewObjectUrl=URL.createObjectURL(file);paintImagePreview(previewObjectUrl);});
-  imagePreview.addEventListener('pointerdown',event=>{const image=imagePreview.querySelector('img');if(!image)return;event.preventDefault();imagePreview.setPointerCapture(event.pointerId);dragPoint={x:event.clientX,y:event.clientY,pointerId:event.pointerId};imagePreview.classList.add('is-dragging');});
-  imagePreview.addEventListener('pointermove',event=>{if(!dragPoint||dragPoint.pointerId!==event.pointerId)return;const image=imagePreview.querySelector('img');if(!image)return;const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight,ratio=(image.naturalWidth||1)/(image.naturalHeight||1),renderW=Math.max(frameW,frameH*ratio),renderH=Math.max(frameH,frameW/ratio),overflowX=renderW-frameW,overflowY=renderH-frameH,dx=event.clientX-dragPoint.x,dy=event.clientY-dragPoint.y;if(overflowX>0)cropX=Math.max(0,Math.min(100,cropX-dx/overflowX*100));if(overflowY>0)cropY=Math.max(0,Math.min(100,cropY-dy/overflowY*100));dragPoint={...dragPoint,x:event.clientX,y:event.clientY};image.style.objectPosition=cropX+'% '+cropY+'%';});
+  updateZoomControl();
+  zoomInput.addEventListener('input',()=>{cropZoom=Number(zoomInput.value)/100;updateZoomControl();updateCropPreview();});
+  dialog.querySelector('[data-crop-reset]').addEventListener('click',resetCrop);
+  imageInput.addEventListener('change',()=>{
+    const file=imageInput.files?.[0];
+    if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl=null;resetCrop();
+    if(!file){paintImagePreview(product?.imageUrl||null);return;}
+    if(!file.type.startsWith('image/')){imageInput.value='';paintImagePreview(product?.imageUrl||null);return;}
+    previewObjectUrl=URL.createObjectURL(file);paintImagePreview(previewObjectUrl);
+  });
+  imagePreview.addEventListener('pointerdown',event=>{
+    const image=imagePreview.querySelector('img');if(!image)return;
+    event.preventDefault();imagePreview.setPointerCapture(event.pointerId);
+    dragPoint={x:event.clientX,y:event.clientY,pointerId:event.pointerId};
+    imagePreview.classList.add('is-dragging');
+  });
+  imagePreview.addEventListener('pointermove',event=>{
+    if(!dragPoint||dragPoint.pointerId!==event.pointerId)return;
+    const image=imagePreview.querySelector('img');if(!image||!image.naturalWidth||!image.naturalHeight)return;
+    const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight;
+    const cropSide=Math.min(image.naturalWidth,image.naturalHeight)/cropZoom;
+    const overflowX=(image.naturalWidth/cropSide-1)*frameW;
+    const overflowY=(image.naturalHeight/cropSide-1)*frameH;
+    const dx=event.clientX-dragPoint.x,dy=event.clientY-dragPoint.y;
+    if(Math.abs(overflowX)>0.01)cropX=Math.max(0,Math.min(100,cropX-dx/overflowX*100));
+    if(Math.abs(overflowY)>0.01)cropY=Math.max(0,Math.min(100,cropY-dy/overflowY*100));
+    dragPoint={...dragPoint,x:event.clientX,y:event.clientY};
+    updateCropPreview();
+  });
   const stopImageDrag=event=>{if(dragPoint&&(!event||event.pointerId===dragPoint.pointerId)){dragPoint=null;imagePreview.classList.remove('is-dragging');}};
   imagePreview.addEventListener('pointerup',stopImageDrag);imagePreview.addEventListener('pointercancel',stopImageDrag);
   dialog.addEventListener('paste',event=>{
@@ -588,7 +638,7 @@ function openProductDialog(root, product=null) {
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
     try{
-      if(selectedImage)record.imageUrl=await uploadProductImage(selectedImage,record.id,{x:cropX,y:cropY});
+      if(selectedImage)record.imageUrl=await uploadProductImage(selectedImage,record.id,{x:cropX,y:cropY,zoom:cropZoom});
       const persisted=await saveAppState();
       if(!persisted)throw new Error('Firestore no confirmó el guardado.');
       dialog.close();renderManagementView(root,'products');notify(editing?'Producto actualizado.':'Producto creado con el código '+code+'.');
