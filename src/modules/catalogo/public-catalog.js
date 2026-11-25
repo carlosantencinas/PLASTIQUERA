@@ -81,7 +81,7 @@ export function renderPublicCatalog(root) {
       <article class="public-catalog-card">
         <div class="public-catalog-image">
           ${item.imagenUrl ? `<img src="${escapeHtml(item.imagenUrl)}" alt="${escapeHtml(item.nombre)}" loading="lazy">` : '<div class="public-catalog-no-image">AM3D</div>'}
-          <button type="button" class="public-catalog-zoom" data-zoom-id="${escapeHtml(item.id)}" aria-label="Ampliar imagen de ${escapeHtml(item.nombre || 'producto')}" title="Ampliar imagen">⌕</button>
+          ${item.imagenUrl ? `<button type="button" class="public-catalog-zoom" data-zoom-id="${escapeHtml(item.id)}" aria-label="Ampliar imagen de ${escapeHtml(item.nombre || 'producto')}" title="Ampliar imagen">⌕</button>` : ''}
         </div>
         <div class="public-catalog-card-body">
           <div class="public-catalog-code">${escapeHtml(item.codigo || '')}</div>
