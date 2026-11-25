@@ -3,15 +3,16 @@ import { auth } from './firebase.js';
 const CLOUDINARY_CLOUD_NAME = 'ixkzxqpv';
 const CLOUDINARY_UPLOAD_PRESET = 'plastiqueria_productos';
 
-async function optimizedImage(file, crop = { x: 50, y: 50 }) {
+async function optimizedImage(file, crop = { x: 50, y: 50, zoom: 1 }) {
   if (!(file instanceof File) || !file.type.startsWith('image/')) throw new Error('Selecciona un archivo de imagen válido.');
   if (file.size > 12 * 1024 * 1024) throw new Error('La imagen supera el límite de 12 MB.');
   if (!globalThis.createImageBitmap) throw new Error('Actualiza Chrome para optimizar esta imagen.');
   const bitmap = await createImageBitmap(file);
   try {
-    const side = Math.min(bitmap.width, bitmap.height);
-    const x = Math.round((bitmap.width - side) * Math.max(0, Math.min(100, Number(crop.x ?? 50))) / 100);
-    const y = Math.round((bitmap.height - side) * Math.max(0, Math.min(100, Number(crop.y ?? 50))) / 100);
+    const zoom = Math.max(0.05, Math.min(2.5, Number(crop.zoom ?? 1)));
+    const side = Math.min(bitmap.width, bitmap.height) / zoom;
+    const x = (bitmap.width - side) * Math.max(0, Math.min(100, Number(crop.x ?? 50))) / 100;
+    const y = (bitmap.height - side) * Math.max(0, Math.min(100, Number(crop.y ?? 50))) / 100;
     const outputSize = 640;
     const canvas = document.createElement('canvas');
     canvas.width = outputSize;
@@ -22,7 +23,8 @@ async function optimizedImage(file, crop = { x: 50, y: 50 }) {
     context.fillRect(0, 0, outputSize, outputSize);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
-    context.drawImage(bitmap, x, y, side, side, 0, 0, outputSize, outputSize);
+    const scale = outputSize / side;
+    context.drawImage(bitmap, -x * scale, -y * scale, bitmap.width * scale, bitmap.height * scale);
     return await new Promise((resolve, reject) => canvas.toBlob(
       blob => blob ? resolve(blob) : reject(new Error('No se pudo comprimir la imagen.')),
       'image/jpeg', 0.82
