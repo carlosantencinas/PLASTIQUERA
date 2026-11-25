@@ -27,6 +27,10 @@ export function renderPublicCatalog(root) {
       <section id="publicCatalogGrid" class="public-catalog-grid" aria-live="polite">
         <div class="public-catalog-empty">Cargando productos y trabajos publicados…</div>
       </section>
+      <div id="publicCatalogLightbox" class="public-catalog-lightbox" aria-hidden="true">
+        <button type="button" class="public-catalog-lightbox-close" aria-label="Cerrar galería">×</button>
+        <div class="public-catalog-lightbox-scroll" tabindex="0" aria-label="Galería de imágenes"></div>
+      </div>
       <footer class="public-catalog-footer">Agencia de Modelos 3D · Catálogo público</footer>
       <a class="public-catalog-whatsapp-float" href="${whatsappUrl()}" target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp"><span class="public-catalog-whatsapp-icon" aria-hidden="true">◉</span><span>¿Consultas o compras?</span><strong>Escríbenos</strong></a>
     </main>`;
@@ -38,6 +42,36 @@ export function renderPublicCatalog(root) {
   const grid = root.querySelector('#publicCatalogGrid');
   const search = root.querySelector('#publicCatalogSearch');
   const count = root.querySelector('#publicCatalogCount');
+  const lightbox = root.querySelector('#publicCatalogLightbox');
+  const lightboxScroll = lightbox.querySelector('.public-catalog-lightbox-scroll');
+  const closeLightbox = () => {
+    lightbox.classList.remove('is-open');
+    lightbox.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('public-catalog-lightbox-open');
+    lightboxScroll.innerHTML = '';
+  };
+  lightbox.querySelector('.public-catalog-lightbox-close').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', event => {
+    if (event.target === lightbox) closeLightbox();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && lightbox.classList.contains('is-open')) closeLightbox();
+  });
+  const openLightbox = (items, index) => {
+    lightboxScroll.innerHTML = items.map(item => `
+      <figure class="public-catalog-lightbox-item">
+        ${item.imagenUrl ? `<img src="${escapeHtml(item.imagenUrl)}" alt="${escapeHtml(item.nombre || 'Producto')}" loading="lazy">` : '<div class="public-catalog-lightbox-no-image">Imagen no disponible</div>'}
+        <figcaption><strong>${escapeHtml(item.nombre || 'Trabajo')}</strong><b>${money(item.precioVenta)}</b></figcaption>
+      </figure>`).join('');
+    lightbox.classList.add('is-open');
+    lightbox.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('public-catalog-lightbox-open');
+    requestAnimationFrame(() => {
+      const target = lightboxScroll.children[index];
+      if (target) lightboxScroll.scrollTop = target.offsetTop - lightboxScroll.offsetTop;
+      lightboxScroll.focus({ preventScroll: true });
+    });
+  };
   const render = () => {
     const term = search.value.trim().toLocaleLowerCase('es');
     const filtered = records.filter(item => [item.nombre, item.codigo, item.descripcion, ...(Array.isArray(item.colores)?item.colores:[])]
@@ -47,6 +81,7 @@ export function renderPublicCatalog(root) {
       <article class="public-catalog-card">
         <div class="public-catalog-image">
           ${item.imagenUrl ? `<img src="${escapeHtml(item.imagenUrl)}" alt="${escapeHtml(item.nombre)}" loading="lazy">` : '<div class="public-catalog-no-image">AM3D</div>'}
+          <button type="button" class="public-catalog-zoom" data-zoom-id="${escapeHtml(item.id)}" aria-label="Ampliar imagen de ${escapeHtml(item.nombre || 'producto')}" title="Ampliar imagen">⌕</button>
         </div>
         <div class="public-catalog-card-body">
           <div class="public-catalog-code">${escapeHtml(item.codigo || '')}</div>
@@ -58,6 +93,10 @@ export function renderPublicCatalog(root) {
           <a class="public-catalog-whatsapp public-catalog-whatsapp-card" href="${escapeHtml(whatsappUrl(item.nombre, item.codigo))}" target="_blank" rel="noopener noreferrer">Consultar o comprar</a>
         </div>
       </article>`).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
+    grid.querySelectorAll('.public-catalog-zoom').forEach(button => button.addEventListener('click', () => {
+      const index = filtered.findIndex(item => item.id === button.dataset.zoomId);
+      if (index >= 0) openLightbox(filtered, index);
+    }));
     grid.querySelectorAll('.public-catalog-image img').forEach(image => image.addEventListener('error', () => {
       const frame = image.closest('.public-catalog-image');
       if (frame) frame.innerHTML = '<div class="public-catalog-no-image">Imagen no disponible</div>';
