@@ -1581,3 +1581,34 @@ body { background: #f5f5f2; }
   .public-catalog-lightbox-item{padding:62px 12px 22px;gap:14px}
   .public-catalog-lightbox-item img{width:96vw;height:70vh}
 }
+
+
+/* Galería de hasta cinco fotografías por producto */
+.product-gallery-editor{display:grid;gap:12px;padding:14px;border:1px solid #dce3ed;border-radius:13px;background:#fbfcff}
+.product-gallery-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.product-gallery-heading>div{display:grid;gap:4px}
+.product-gallery-heading b{font-size:14px;color:#20283a}
+.product-gallery-heading small,.product-gallery-note{font-size:11px;line-height:1.45;color:#64748b}
+.product-gallery-heading>strong{padding:5px 9px;border-radius:999px;background:#e9eef8;color:#34435b;font-size:12px;font-variant-numeric:tabular-nums}
+.product-gallery-upload{margin:0}
+.product-gallery-upload input{display:block;width:100%;margin-top:8px}
+.product-gallery-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:10px}
+.product-gallery-item{display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px;align-items:center;padding:9px;border:1px solid #e1e7f0;border-radius:10px;background:#fff}
+.product-gallery-item>img{width:88px;height:112px;object-fit:contain;border-radius:7px;background:#f1f4f8}
+.product-gallery-item-info{display:grid;gap:6px;min-width:0}
+.product-gallery-item-info>label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#26344a}
+.product-gallery-item-info>label input{accent-color:#e30613}
+.product-gallery-item-info>small{font-size:10px;color:#718096}
+.product-gallery-item-actions{display:flex;flex-wrap:wrap;gap:5px}
+.product-gallery-item-actions .management-link{padding:5px 7px;font-size:10px}
+.product-gallery-item-actions button:disabled{opacity:.35;cursor:not-allowed}
+.product-gallery-replace{display:inline-flex;align-items:center;cursor:pointer}
+.product-gallery-note{margin:0}
+.public-catalog-zoom{display:flex;align-items:center;justify-content:center;gap:3px}
+.public-catalog-zoom small{display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:99px;background:#e30613;color:#fff;font-size:10px;font-weight:900}
+@media(max-width:560px){
+ .product-gallery-list{grid-template-columns:1fr}
+ .product-gallery-item{grid-template-columns:76px minmax(0,1fr)}
+ .product-gallery-item>img{width:76px;height:100px}
+ .product-gallery-item-actions{gap:4px}
+}
