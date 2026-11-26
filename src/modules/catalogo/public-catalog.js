@@ -7,6 +7,11 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 const money = value => 'Bs ' + Number(value || 0).toLocaleString('es-BO', {
   minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
+const imageUrlsFor = item => {
+  const values = Array.isArray(item.imagenesUrl) ? item.imagenesUrl : [];
+  const urls = [...new Set([...values, item.imagenUrl].map(value => String(value || '').trim()).filter(value => /^https:\/\//i.test(value)))];
+  return urls.slice(0, 5);
+};
 const whatsappUrl = (name = '', code = '') => {
   const detail = name ? ` sobre ${name}${code ? ` (código ${code})` : ''}` : '';
   const message = `Hola, vi${detail} en el catálogo de PLASTIQUERA y quisiera consultar disponibilidad y realizar una compra.`;
@@ -77,11 +82,14 @@ export function renderPublicCatalog(root) {
     const filtered = records.filter(item => [item.nombre, item.codigo, item.descripcion, ...(Array.isArray(item.colores)?item.colores:[])]
       .join(' ').toLocaleLowerCase('es').includes(term));
     count.textContent = filtered.length + (filtered.length === 1 ? ' publicación' : ' publicaciones');
-    grid.innerHTML = filtered.length ? filtered.map(item => `
+    grid.innerHTML = filtered.length ? filtered.map(item => {
+      const photos = imageUrlsFor(item);
+      const cover = photos[0] || '';
+      return `
       <article class="public-catalog-card">
         <div class="public-catalog-image">
-          ${item.imagenUrl ? `<img src="${escapeHtml(item.imagenUrl)}" alt="${escapeHtml(item.nombre)}" loading="lazy">` : '<div class="public-catalog-no-image">AM3D</div>'}
-          ${item.imagenUrl ? `<button type="button" class="public-catalog-zoom" data-zoom-id="${escapeHtml(item.id)}" aria-label="Ampliar imagen de ${escapeHtml(item.nombre || 'producto')}" title="Ampliar imagen">⌕</button>` : ''}
+          ${cover ? `<img src="${escapeHtml(cover)}" alt="${escapeHtml(item.nombre)}" loading="lazy">` : '<div class="public-catalog-no-image">AM3D</div>'}
+          ${cover ? `<button type="button" class="public-catalog-zoom" data-zoom-id="${escapeHtml(item.id)}" aria-label="Ampliar galería de ${escapeHtml(item.nombre || 'producto')}" title="Ver fotografías">${photos.length>1?'<span>⌕</span><small>'+photos.length+'</small>':'⌕'}</button>` : ''}
         </div>
         <div class="public-catalog-card-body">
           <div class="public-catalog-code">${escapeHtml(item.codigo || '')}</div>
@@ -92,9 +100,10 @@ export function renderPublicCatalog(root) {
           <strong class="public-catalog-price">${money(item.precioVenta)}</strong>
           <a class="public-catalog-whatsapp public-catalog-whatsapp-card" href="${escapeHtml(whatsappUrl(item.nombre, item.codigo))}" target="_blank" rel="noopener noreferrer">Consultar o comprar</a>
         </div>
-      </article>`).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
+      </article>`;
+    }).join('') : '<p class="public-catalog-empty">No hay productos o trabajos publicados que coincidan con la búsqueda.</p>';
     grid.querySelectorAll('.public-catalog-zoom').forEach(button => button.addEventListener('click', () => {
-      const galleryItems = filtered.filter(item => Boolean(item.imagenUrl));
+      const galleryItems = filtered.flatMap(item => imageUrlsFor(item).map((url, photoIndex) => ({...item, imagenUrl:url, photoIndex})));
       const index = galleryItems.findIndex(item => item.id === button.dataset.zoomId);
       if (index >= 0) openLightbox(galleryItems, index);
     }));

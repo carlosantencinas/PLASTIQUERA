@@ -527,7 +527,12 @@ function openProductDialog(root, product=null) {
     <label class="management-field">Tipo de producto<select name="tipo" required>${typeOptions}</select></label>
     <label class="management-field">Nombre del producto<input name="nombre" required maxlength="120" value="${esc(product?.nombre||'')}" placeholder="Ej. Soporte para celular"></label>
     <label class="management-field">Código del producto<div class="management-code-field"><input name="codigo" required maxlength="60" value="${esc(initialCode)}"><button type="button" class="management-button secondary" data-regenerate-code>Generar</button></div><small>Debe ser único en todo el catálogo, incluidas las variantes.</small></label>
-    <div class="product-image-editor"><label class="management-field">Imagen del producto<input name="imagen" type="file" accept="image/*"><small>Pega con Ctrl+V o sube una imagen. Arrástrala dentro del recuadro para elegir el encuadre; no se deforma.</small></label><div class="product-image-crop-area"><div class="product-image-preview" data-product-image-preview aria-label="Arrastra la imagen para ajustar el recorte">${product?.imageUrl?`<img src="${esc(product.imageUrl)}" alt="Vista previa actual">`:'<span>Sin imagen seleccionada</span>'}</div><div class="product-image-crop-controls"><label for="product-image-zoom">Zoom <output data-crop-zoom-value>100%</output><input id="product-image-zoom" type="range" min="5" max="250" step="5" value="100" data-crop-zoom></label><button type="button" class="management-link" data-crop-reset>Restablecer encuadre</button></div><small class="product-image-crop-hint">Vista cuadrada · arrastra horizontal o verticalmente. Reduce el zoom para mostrar el modelo completo.</small></div></div>
+    <section class="product-gallery-editor">
+      <div class="product-gallery-heading"><div><b>Fotografías del producto</b><small>Hasta 5 imágenes. La principal aparecerá en el catálogo.</small></div><strong data-image-count>0/5</strong></div>
+      <label class="management-field product-gallery-upload">Añadir fotografías<input name="imagenes" type="file" accept="image/*" multiple><small>Se optimizan sin deformarse: máximo 1080 × 1920 px, proporción original y calidad JPEG 90 %. Recomendado: fotos verticales tipo iPhone.</small></label>
+      <div class="product-gallery-list" data-image-list></div>
+      <p class="product-gallery-note">Puedes elegir la foto principal, cambiar el orden, reemplazar o eliminar imágenes. Las fotos anteriores se conservan al editar.</p>
+    </section>
     <label class="management-field">Descripción para el catálogo público<textarea name="descripcionCatalogo" rows="3" maxlength="1200" placeholder="Describe el producto para tus clientes…">${esc(product?.descripcionCatalogo||'')}</textarea><small>Esta descripción será visible en la página pública; las notas internas no se publican.</small></label>
     <label class="management-field">Precio de venta para el catálogo (Bs)<input name="precioVenta" type="number" min="0" step="0.01" value="${esc(product?.precioVenta??'')}" placeholder="Ej. 85.00"><small>Precio independiente de las cotizaciones de trabajos.</small></label>
     <label class="management-field"><span><input name="publicadoCatalogo" type="checkbox" ${product?.publicadoCatalogo===true?'checked':''}> Publicar este producto en el catálogo público</span><small>Al activarlo, el producto y su precio serán visibles para cualquier visitante.</small></label>
@@ -537,80 +542,83 @@ function openProductDialog(root, product=null) {
   </form>`;
   const form=dialog.querySelector('form');
   const error=dialog.querySelector('.management-dialog-error');
-  const imageInput=form.elements.imagen,imagePreview=dialog.querySelector('[data-product-image-preview]');
-  let previewObjectUrl=null,cropX=50,cropY=50,cropZoom=1,dragPoint=null;
-  const zoomInput=dialog.querySelector('[data-crop-zoom]');
-  const zoomValue=dialog.querySelector('[data-crop-zoom-value]');
-  const updateCropPreview=()=>{
-    const image=imagePreview.querySelector('img');
-    if(!image||!image.naturalWidth||!image.naturalHeight)return;
-    const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight;
-    const cropSide=Math.min(image.naturalWidth,image.naturalHeight)/cropZoom;
-    const scale=frameW/cropSide;
-    const sourceX=(image.naturalWidth-cropSide)*cropX/100;
-    const sourceY=(image.naturalHeight-cropSide)*cropY/100;
-    image.style.position='absolute';
-    image.style.maxWidth='none';image.style.maxHeight='none';
-    image.style.width=(image.naturalWidth*scale)+'px';
-    image.style.height=(image.naturalHeight*scale)+'px';
-    image.style.left=(-sourceX*scale)+'px';
-    image.style.top=(-sourceY*scale)+'px';
+  const imageInput=form.elements.imagenes;
+  const imageList=dialog.querySelector('[data-image-list]');
+  const imageCount=dialog.querySelector('[data-image-count]');
+  const storedImages=(Array.isArray(product?.imageUrls)&&product.imageUrls.length?product.imageUrls:[product?.imageUrl])
+    .filter(url=>/^https:\/\//i.test(String(url||''))).slice(0,5);
+  const mainImage=String(product?.imageUrl||storedImages[0]||'');
+  const orderedStoredImages=mainImage?[mainImage,...storedImages.filter(url=>url!==mainImage)]:storedImages;
+  let imagesDraft=orderedStoredImages.map(url=>({url:String(url),file:null,preview:String(url)}));
+  let primaryIndex=0;
+  const revokePreview=item=>{if(item?.objectUrl)URL.revokeObjectURL(item.objectUrl);};
+  const renderImages=()=>{
+    imageCount.textContent=imagesDraft.length+'/5';
+    imageList.innerHTML=imagesDraft.map((item,index)=>`
+      <article class="product-gallery-item" data-image-index="${index}">
+        <img src="${esc(item.preview)}" alt="Fotografía ${index+1}" loading="lazy">
+        <div class="product-gallery-item-info">
+          <label><input type="radio" name="mainProductImage" value="${index}" ${index===primaryIndex?'checked':''}> ${index===primaryIndex?'Foto principal':'Usar como principal'}</label>
+          <small>Foto ${index+1} de ${imagesDraft.length}</small>
+          <div class="product-gallery-item-actions">
+            <button type="button" class="management-link" data-image-action="up" data-index="${index}" ${index===0?'disabled':''}>↑ Subir</button>
+            <button type="button" class="management-link" data-image-action="down" data-index="${index}" ${index===imagesDraft.length-1?'disabled':''}>↓ Bajar</button>
+            <label class="management-link product-gallery-replace">Reemplazar<input type="file" accept="image/*" data-image-replace="${index}" hidden></label>
+            <button type="button" class="management-link danger" data-image-action="remove" data-index="${index}">Eliminar</button>
+          </div>
+        </div>
+      </article>`).join('')||'<p class="management-empty">Todavía no hay fotografías. Añade al menos una para publicar el producto.</p>';
   };
-  const paintImagePreview=source=>{
-    imagePreview.innerHTML=source?'<img src="'+source+'" alt="Vista previa del recorte" draggable="false">':'<span>Sin imagen seleccionada</span>';
-    const image=imagePreview.querySelector('img');
-    if(image){image.addEventListener('load',updateCropPreview,{once:true});if(image.complete)updateCropPreview();}
+  const addImages=files=>{
+    const incoming=Array.from(files||[]);
+    if(!incoming.length)return;
+    const valid=incoming.filter(file=>file.type.startsWith('image/')&&file.size<=12*1024*1024);
+    if(valid.length!==incoming.length)notify('Se omitieron archivos no válidos o mayores de 12 MB.');
+    const available=Math.max(0,5-imagesDraft.length);
+    if(valid.length>available)notify('El límite es de 5 fotografías por producto.');
+    valid.slice(0,available).forEach(file=>{
+      const objectUrl=URL.createObjectURL(file);
+      imagesDraft.push({file,preview:objectUrl,objectUrl});
+    });
+    renderImages();
   };
-  const updateZoomControl=()=>{zoomInput.value=String(Math.round(cropZoom*100));zoomValue.textContent=Math.round(cropZoom*100)+'%';};
-  const resetCrop=()=>{cropX=50;cropY=50;cropZoom=1;updateZoomControl();updateCropPreview();};
-  paintImagePreview(product?.imageUrl||null);
-  updateZoomControl();
-  zoomInput.addEventListener('input',()=>{cropZoom=Number(zoomInput.value)/100;updateZoomControl();updateCropPreview();});
-  dialog.querySelector('[data-crop-reset]').addEventListener('click',resetCrop);
-  imageInput.addEventListener('change',()=>{
-    const file=imageInput.files?.[0];
-    if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
-    previewObjectUrl=null;resetCrop();
-    if(!file){paintImagePreview(product?.imageUrl||null);return;}
-    if(!file.type.startsWith('image/')){imageInput.value='';paintImagePreview(product?.imageUrl||null);return;}
-    previewObjectUrl=URL.createObjectURL(file);paintImagePreview(previewObjectUrl);
+  imageInput.addEventListener('change',()=>{addImages(imageInput.files);imageInput.value='';});
+  imageList.addEventListener('change',event=>{
+    if(event.target.matches('input[name="mainProductImage"]')){primaryIndex=Number(event.target.value);renderImages();}
+    if(event.target.matches('[data-image-replace]')){
+      const index=Number(event.target.dataset.imageReplace),file=event.target.files?.[0];
+      if(!file)return;
+      if(!file.type.startsWith('image/')||file.size>12*1024*1024){alert('Selecciona una imagen válida de hasta 12 MB.');return;}
+      const objectUrl=URL.createObjectURL(file),previous=imagesDraft[index];
+      revokePreview(previous);
+      imagesDraft[index]={file,preview:objectUrl,objectUrl};
+      renderImages();
+    }
   });
-  imagePreview.addEventListener('pointerdown',event=>{
-    const image=imagePreview.querySelector('img');if(!image)return;
-    event.preventDefault();imagePreview.setPointerCapture(event.pointerId);
-    dragPoint={x:event.clientX,y:event.clientY,pointerId:event.pointerId};
-    imagePreview.classList.add('is-dragging');
+  imageList.addEventListener('click',event=>{
+    const button=event.target.closest('[data-image-action]');
+    if(!button)return;
+    const index=Number(button.dataset.index),action=button.dataset.imageAction;
+    if(!imagesDraft[index])return;
+    if(action==='remove'){
+      revokePreview(imagesDraft[index]);imagesDraft.splice(index,1);
+      if(primaryIndex===index)primaryIndex=0;else if(primaryIndex>index)primaryIndex--;
+    }else if(action==='up'&&index>0){
+      [imagesDraft[index-1],imagesDraft[index]]=[imagesDraft[index],imagesDraft[index-1]];
+      if(primaryIndex===index)primaryIndex--;else if(primaryIndex===index-1)primaryIndex++;
+    }else if(action==='down'&&index<imagesDraft.length-1){
+      [imagesDraft[index+1],imagesDraft[index]]=[imagesDraft[index],imagesDraft[index+1]];
+      if(primaryIndex===index)primaryIndex++;else if(primaryIndex===index+1)primaryIndex--;
+    }
+    renderImages();
   });
-  imagePreview.addEventListener('pointermove',event=>{
-    if(!dragPoint||dragPoint.pointerId!==event.pointerId)return;
-    const image=imagePreview.querySelector('img');if(!image||!image.naturalWidth||!image.naturalHeight)return;
-    const frameW=imagePreview.clientWidth,frameH=imagePreview.clientHeight;
-    const cropSide=Math.min(image.naturalWidth,image.naturalHeight)/cropZoom;
-    const overflowX=(image.naturalWidth/cropSide-1)*frameW;
-    const overflowY=(image.naturalHeight/cropSide-1)*frameH;
-    const dx=event.clientX-dragPoint.x,dy=event.clientY-dragPoint.y;
-    if(Math.abs(overflowX)>0.01)cropX=Math.max(0,Math.min(100,cropX-dx/overflowX*100));
-    if(Math.abs(overflowY)>0.01)cropY=Math.max(0,Math.min(100,cropY-dy/overflowY*100));
-    dragPoint={...dragPoint,x:event.clientX,y:event.clientY};
-    updateCropPreview();
-  });
-  const stopImageDrag=event=>{if(dragPoint&&(!event||event.pointerId===dragPoint.pointerId)){dragPoint=null;imagePreview.classList.remove('is-dragging');}};
-  imagePreview.addEventListener('pointerup',stopImageDrag);imagePreview.addEventListener('pointercancel',stopImageDrag);
   dialog.addEventListener('paste',event=>{
     const items=Array.from(event.clipboardData?.items||[]);
-    const imageItem=items.find(item=>item.kind==='file'&&item.type.startsWith('image/'));
-    const pasted=imageItem?.getAsFile();
-    if(!pasted)return;
-    event.preventDefault();
-    const extension=pasted.type==='image/jpeg'?'jpg':pasted.type==='image/webp'?'webp':pasted.type==='image/gif'?'gif':'png';
-    const file=new File([pasted],`imagen-producto-${Date.now()}.${extension}`,{type:pasted.type});
-    const transfer=new DataTransfer();
-    transfer.items.add(file);
-    imageInput.files=transfer.files;
-    imageInput.dispatchEvent(new Event('change',{bubbles:true}));
-    notify('Imagen pegada. Se guardará al actualizar el producto.');
+    const pasted=items.find(item=>item.kind==='file'&&item.type.startsWith('image/'))?.getAsFile();
+    if(pasted){event.preventDefault();addImages([new File([pasted],`foto-producto-${Date.now()}.png`,{type:pasted.type} )]);}
   });
-  dialog.addEventListener('close',()=>{if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);dialog.remove();});
+  renderImages();
+  dialog.addEventListener('close',()=>{imagesDraft.forEach(revokePreview);dialog.remove();});
   const codeInput=form.elements.codigo;
   const regenerate=()=>{codeInput.value=nextProductCode(form.elements.tipo.value);};
   form.elements.tipo.addEventListener('change',()=>{if(!editing||codeInput.dataset.manual!=='true')regenerate();});
@@ -630,15 +638,20 @@ function openProductDialog(root, product=null) {
     const catalogPrice=catalogPriceText===''?0:Number(catalogPriceText);
     const publishToCatalog=form.elements.publicadoCatalogo.checked;
     if(publishToCatalog&&(!Number.isFinite(catalogPrice)||catalogPrice<=0)){error.textContent='Para publicar el producto, define primero un precio de venta mayor que cero.';error.hidden=false;return;}
-    if(publishToCatalog&&!imageInput.files?.[0]&&!/^https:\/\//i.test(String(product?.imageUrl||''))){error.textContent='Para publicar el producto, primero añade su fotografía. Se guardará en Cloudinary y aparecerá en el catálogo público.';error.hidden=false;return;}
+    if(publishToCatalog&&!imagesDraft.length){error.textContent='Para publicar el producto, primero añade al menos una fotografía.';error.hidden=false;return;}
     if(catalogPriceText!==''&&(!Number.isFinite(catalogPrice)||catalogPrice<0)){error.textContent='El precio de venta debe ser un número igual o mayor que cero.';error.hidden=false;return;}
     const record=product||{id:makeId('prod'),createdAt:Date.now()};
     Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim(),descripcionCatalogo:String(data.descripcionCatalogo||'').trim(),precioVenta:catalogPrice,publicadoCatalogo:publishToCatalog});
-    const selectedImage=imageInput.files?.[0]||null;
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
     try{
-      if(selectedImage)record.imageUrl=await uploadProductImage(selectedImage,record.id,{x:cropX,y:cropY,zoom:cropZoom});
+      const uploadedImages=[];
+      for(const image of imagesDraft){
+        uploadedImages.push(image.file?await uploadProductImage(image.file,record.id):image.url);
+      }
+      const selectedPrimaryUrl=uploadedImages[primaryIndex]||uploadedImages[0]||'';
+      record.imageUrls=selectedPrimaryUrl?[selectedPrimaryUrl,...uploadedImages.filter(url=>url!==selectedPrimaryUrl)]:uploadedImages;
+      record.imageUrl=selectedPrimaryUrl;
       const persisted=await saveAppState();
       if(!persisted)throw new Error('Firestore no confirmó el guardado.');
       dialog.close();renderManagementView(root,'products');notify(editing?'Producto actualizado.':'Producto creado con el código '+code+'.');
