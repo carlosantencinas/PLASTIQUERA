@@ -1551,7 +1551,7 @@ body { background: #f5f5f2; }
   outline:none
 }
 .public-catalog-lightbox-item{
-  min-height:100%;width:100%;margin:0;padding:68px 24px 30px;
+  min-height:100%;width:100%;margin:0;padding:68px 24px 126px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:18px;scroll-snap-align:start;scroll-snap-stop:always
 }
@@ -1563,23 +1563,28 @@ body { background: #f5f5f2; }
   display:grid;place-items:center;width:min(92vw,1100px);height:min(65vh,650px);
   color:#aab3c2;background:#222a38;border-radius:8px
 }
-.public-catalog-lightbox-item figcaption{
-  display:flex;flex-direction:column;align-items:center;gap:5px;
-  max-width:min(92vw,900px);text-align:center
-}
-.public-catalog-lightbox-item figcaption strong{
+.public-catalog-lightbox-caption strong{
   color:#fff;font:700 clamp(18px,2.6vw,26px) 'Space Grotesk',sans-serif;
   overflow-wrap:anywhere
 }
-.public-catalog-lightbox-item figcaption b{
+.public-catalog-lightbox-caption b{
   color:#72e0a2;font:800 clamp(19px,2.8vw,28px) 'DM Sans',sans-serif;
   font-variant-numeric:tabular-nums
+}
+.public-catalog-lightbox-caption{
+  position:absolute;z-index:2;left:50%;bottom:max(16px,env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  width:min(calc(100% - 32px),900px);padding:12px 18px;
+  transform:translateX(-50%);border:1px solid #ffffff35;border-radius:14px;
+  background:rgba(16,21,31,.9);backdrop-filter:blur(12px);
+  box-shadow:0 8px 28px #0005;text-align:center;pointer-events:none
 }
 @media(max-width:600px){
   .public-catalog-zoom{width:38px;height:38px;right:9px;bottom:9px}
   .public-catalog-lightbox-close{top:10px;right:10px;width:42px;height:42px}
-  .public-catalog-lightbox-item{padding:62px 12px 22px;gap:14px}
-  .public-catalog-lightbox-item img{width:96vw;height:70vh}
+  .public-catalog-lightbox-item{padding:62px 12px 122px;gap:14px}
+  .public-catalog-lightbox-item img{width:96vw;height:64vh}
+  .public-catalog-lightbox-caption{width:calc(100% - 24px);padding:10px 14px;bottom:max(12px,env(safe-area-inset-bottom))}
 }
 
 
