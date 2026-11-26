@@ -545,8 +545,11 @@ function openProductDialog(root, product=null) {
   const imageInput=form.elements.imagenes;
   const imageList=dialog.querySelector('[data-image-list]');
   const imageCount=dialog.querySelector('[data-image-count]');
-  let imagesDraft=(Array.isArray(product?.imageUrls)&&product.imageUrls.length?product.imageUrls:[product?.imageUrl])
-    .filter(url=>/^https:\/\//i.test(String(url||''))).slice(0,5).map(url=>({url:String(url),file:null,preview:String(url)}));
+  const storedImages=(Array.isArray(product?.imageUrls)&&product.imageUrls.length?product.imageUrls:[product?.imageUrl])
+    .filter(url=>/^https:\/\//i.test(String(url||''))).slice(0,5);
+  const mainImage=String(product?.imageUrl||storedImages[0]||'');
+  const orderedStoredImages=mainImage?[mainImage,...storedImages.filter(url=>url!==mainImage)]:storedImages;
+  let imagesDraft=orderedStoredImages.map(url=>({url:String(url),file:null,preview:String(url)}));
   let primaryIndex=0;
   const revokePreview=item=>{if(item?.objectUrl)URL.revokeObjectURL(item.objectUrl);};
   const renderImages=()=>{
@@ -646,8 +649,9 @@ function openProductDialog(root, product=null) {
       for(const image of imagesDraft){
         uploadedImages.push(image.file?await uploadProductImage(image.file,record.id):image.url);
       }
-      record.imageUrls=uploadedImages;
-      record.imageUrl=uploadedImages[primaryIndex]||uploadedImages[0]||'';
+      const selectedPrimaryUrl=uploadedImages[primaryIndex]||uploadedImages[0]||'';
+      record.imageUrls=selectedPrimaryUrl?[selectedPrimaryUrl,...uploadedImages.filter(url=>url!==selectedPrimaryUrl)]:uploadedImages;
+      record.imageUrl=selectedPrimaryUrl;
       const persisted=await saveAppState();
       if(!persisted)throw new Error('Firestore no confirmó el guardado.');
       dialog.close();renderManagementView(root,'products');notify(editing?'Producto actualizado.':'Producto creado con el código '+code+'.');
