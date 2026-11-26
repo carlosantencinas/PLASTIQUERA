@@ -639,7 +639,6 @@ function openProductDialog(root, product=null) {
     if(catalogPriceText!==''&&(!Number.isFinite(catalogPrice)||catalogPrice<0)){error.textContent='El precio de venta debe ser un número igual o mayor que cero.';error.hidden=false;return;}
     const record=product||{id:makeId('prod'),createdAt:Date.now()};
     Object.assign(record,{codigo:code,tipo:type,nombre:name,notas:String(data.notas||'').trim(),descripcionCatalogo:String(data.descripcionCatalogo||'').trim(),precioVenta:catalogPrice,publicadoCatalogo:publishToCatalog});
-    const selectedImage=imageInput.files?.[0]||null;
     if(!product)appState.products.push(record);
     const submit=form.querySelector('[type="submit"]');submit.disabled=true;submit.textContent='Guardando…';
     try{
