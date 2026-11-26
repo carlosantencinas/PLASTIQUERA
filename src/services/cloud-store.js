@@ -186,7 +186,10 @@ async function synchronizePublicCatalog() {
       .filter(variant => variant && variant.activo !== false)
       .map(variant => String(variant.nombre || '').trim())
       .filter(Boolean);
-    const imageUrl = String(product.imageUrl || '').trim();
+    const imageUrls = [...new Set((Array.isArray(product.imageUrls) ? product.imageUrls : [product.imageUrl])
+      .map(value => String(value || '').trim()).filter(value => /^https:\/\//i.test(value)))].slice(0, 5);
+    const imageUrl = String(product.imageUrl || imageUrls[0] || '').trim();
+    const orderedImages = imageUrls.includes(imageUrl) ? [imageUrl, ...imageUrls.filter(value => value !== imageUrl)] : imageUrls;
     const base = {
       tipoRegistro: 'producto',
       gestionCatalogo: 'productos-v1',
@@ -194,6 +197,7 @@ async function synchronizePublicCatalog() {
       nombre: String(product.nombre || 'Producto').slice(0, 160),
       descripcion: String(product.descripcionCatalogo || '').slice(0, 1200),
       imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      imagenesUrl: orderedImages,
       precioVenta: Math.max(0, Number(product.precioVenta || 0)),
       colores: [...new Set(colors)].slice(0, 30),
       otrosColoresPedido: false,
@@ -211,7 +215,10 @@ async function synchronizePublicCatalog() {
     const colors = Array.isArray(data.catalogoColores)
       ? [...new Set(data.catalogoColores.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 30)
       : [];
-    const imageUrl = String(product.imageUrl || '').trim();
+    const imageUrls = [...new Set((Array.isArray(product.imageUrls) ? product.imageUrls : [product.imageUrl])
+      .map(value => String(value || '').trim()).filter(value => /^https:\/\//i.test(value)))].slice(0, 5);
+    const imageUrl = String(product.imageUrl || imageUrls[0] || '').trim();
+    const orderedImages = imageUrls.includes(imageUrl) ? [imageUrl, ...imageUrls.filter(value => value !== imageUrl)] : imageUrls;
     const base = {
       tipoRegistro: 'trabajo',
       gestionCatalogo: 'trabajos-v1',
@@ -219,6 +226,7 @@ async function synchronizePublicCatalog() {
       nombre: String(data.nombre || product.nombre || 'Trabajo').slice(0, 160),
       descripcion: String(data.catalogoDescripcion || data.descripcion || product.descripcionCatalogo || '').slice(0, 1200),
       imagenUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      imagenesUrl: orderedImages,
       precioVenta: Math.max(0, Number(data.catalogoPrecioVenta || 0)),
       colores: colors,
       otrosColoresPedido: data.catalogoOtrosColores !== false,
