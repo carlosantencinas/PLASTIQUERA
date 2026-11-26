@@ -35,6 +35,7 @@ export function renderPublicCatalog(root) {
       <div id="publicCatalogLightbox" class="public-catalog-lightbox" aria-hidden="true">
         <button type="button" class="public-catalog-lightbox-close" aria-label="Cerrar galería">×</button>
         <div class="public-catalog-lightbox-scroll" tabindex="0" aria-label="Galería de imágenes"></div>
+        <div class="public-catalog-lightbox-caption" aria-live="polite"><strong></strong><b></b></div>
       </div>
       <footer class="public-catalog-footer">Agencia de Modelos 3D · Catálogo público</footer>
       <a class="public-catalog-whatsapp-float" href="${whatsappUrl()}" target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp"><span class="public-catalog-whatsapp-icon" aria-hidden="true">◉</span><span>¿Consultas o compras?</span><strong>Escríbenos</strong></a>
@@ -49,10 +50,14 @@ export function renderPublicCatalog(root) {
   const count = root.querySelector('#publicCatalogCount');
   const lightbox = root.querySelector('#publicCatalogLightbox');
   const lightboxScroll = lightbox.querySelector('.public-catalog-lightbox-scroll');
+  const lightboxCaption = lightbox.querySelector('.public-catalog-lightbox-caption');
+  let galleryObserver = null;
   const closeLightbox = () => {
     lightbox.classList.remove('is-open');
     lightbox.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('public-catalog-lightbox-open');
+    if (galleryObserver) galleryObserver.disconnect();
+    galleryObserver = null;
     lightboxScroll.innerHTML = '';
   };
   lightbox.querySelector('.public-catalog-lightbox-close').addEventListener('click', closeLightbox);
@@ -63,11 +68,22 @@ export function renderPublicCatalog(root) {
     if (event.key === 'Escape' && lightbox.classList.contains('is-open')) closeLightbox();
   });
   const openLightbox = (items, index) => {
+    if (galleryObserver) galleryObserver.disconnect();
     lightboxScroll.innerHTML = items.map(item => `
-      <figure class="public-catalog-lightbox-item">
+      <figure class="public-catalog-lightbox-item" data-product-name="${escapeHtml(item.nombre || 'Trabajo')}" data-product-price="${escapeHtml(money(item.precioVenta))}">
         ${item.imagenUrl ? `<img src="${escapeHtml(item.imagenUrl)}" alt="${escapeHtml(item.nombre || 'Producto')}" loading="lazy">` : '<div class="public-catalog-lightbox-no-image">Imagen no disponible</div>'}
-        <figcaption><strong>${escapeHtml(item.nombre || 'Trabajo')}</strong><b>${money(item.precioVenta)}</b></figcaption>
       </figure>`).join('');
+    const initialItem = items[index];
+    lightboxCaption.querySelector('strong').textContent = initialItem?.nombre || 'Trabajo';
+    lightboxCaption.querySelector('b').textContent = money(initialItem?.precioVenta);
+    galleryObserver = new IntersectionObserver(entries => {
+      const active = entries.filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!active) return;
+      lightboxCaption.querySelector('strong').textContent = active.target.dataset.productName || 'Trabajo';
+      lightboxCaption.querySelector('b').textContent = active.target.dataset.productPrice || money(0);
+    }, { root: lightboxScroll, threshold: [0.55, 0.7] });
+    [...lightboxScroll.children].forEach(item => galleryObserver.observe(item));
     lightbox.classList.add('is-open');
     lightbox.setAttribute('aria-hidden', 'false');
     document.body.classList.add('public-catalog-lightbox-open');
