@@ -1784,3 +1784,15 @@ body { background: #f5f5f2; }
 .sales-profitability-table td:first-child small { display:block; margin-top:3px; color:#9a5a19; font-size:9px; }
 .sales-profitability-table tfoot th { position:sticky; bottom:0; background:#eef2f7; color:#20232a; font-weight:850; }
 .sales-profitability-table td:last-child,.sales-profitability-table tfoot th:last-child { color:#087c57; font-weight:850; }
+
+
+/* Cotizaciones: imagen de referencia opcional y vista previa */
+.quote-reference-upload{display:grid;gap:8px}
+.quote-reference-drop{display:grid;gap:5px;place-items:center;min-height:104px;padding:16px;border:2px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#263449;text-align:center;cursor:pointer}
+.quote-reference-drop:hover{border-color:#e30613;background:#fffafa}
+.quote-reference-drop strong{font-size:13px}
+.quote-reference-drop small{font-size:11px;color:#64748b}
+.quote-reference-preview{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}
+.quote-reference-preview[hidden]{display:none}
+.quote-reference-preview img{width:auto;height:auto;max-width:min(100%,220px);max-height:180px;object-fit:contain;border-radius:7px}
+@media(max-width:560px){.quote-reference-drop{min-height:92px;padding:12px}.quote-reference-preview{align-items:flex-start}}

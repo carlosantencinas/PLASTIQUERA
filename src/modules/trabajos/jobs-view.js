@@ -1,6 +1,7 @@
 import { calculateJob } from '../../calculations/jobs.js';
 import JsBarcode from 'jsbarcode';
 import { appState, saveAppState } from '../../services/app-store.js';
+import { uploadProductImage } from '../../services/product-images.js';
 import { inventoryState, getMaterialById, applyJobMaterials, removeJobMaterial } from '../../services/inventory-store.js';
 
 const money = value =>
@@ -95,6 +96,7 @@ function readForm(form) {
     piezas,
     piezasFallidas,
     piezasVendibles: Math.max(piezas - piezasFallidas, 0),
+    imagenReferencia: '',
     margen: number(fd.get('margen')),
   };
 }
@@ -279,6 +281,14 @@ function openQuote(job) {
   const date = new Date(data.fecha || Date.now()).toLocaleDateString('es-BO');
   const reference = `COT-${new Date(data.fecha || Date.now()).getFullYear()}-${String(job.id).slice(-8).toUpperCase()}`;
   const brandLogoUrl = new URL(import.meta.env.BASE_URL + 'imagotipo.svg', window.location.href).href;
+  const materialRows = (Array.isArray(data.materiales) ? data.materiales : []).map(row => {
+    const material = getMaterialById(row.materialId);
+    const materialName = material?.nombre || 'Material manual';
+    const materialType = materialName.match(/\\b(PLA\\+?|PETG\\+?|TPU|ABS|ASA|PVA|HIPS|PC|NYLON|PA|PET)\\b/i)?.[0]?.toUpperCase() || materialName;
+    const colorName = material ? (material.colorHex || row.color || 'Color no definido') : (row.color || 'Color no especificado');
+    return { materialType, colorName, grams: Number(row.gramos || 0) };
+  }).filter(row => row.grams > 0);
+  const materialsReport = materialRows.length ? `<section class="materials-report"><h2>Materiales y colores de fabricación</h2><table><thead><tr><th>Material</th><th>Color a utilizar</th><th>Cantidad estimada</th></tr></thead><tbody>${materialRows.map(row => `<tr><td>${escapeText(row.materialType)}</td><td>${escapeText(row.colorName)}</td><td>${row.grams.toLocaleString('es-BO',{maximumFractionDigits:2})} g</td></tr>`).join('')}</tbody></table></section>` : '';
   popup.document.open();
   popup.document.write(`<!doctype html>
 <html lang="es">
@@ -295,7 +305,7 @@ function openQuote(job) {
   .box strong{font-size:14px}.description{margin:24px 0;color:#46536a;line-height:1.6;white-space:pre-wrap}
   table{width:100%;border-collapse:collapse;margin-top:26px}th{padding:12px;text-align:left;background:#fffbea;color:#5c5c5c;font-size:11px;text-transform:uppercase}
   td{padding:15px 12px;border-bottom:1px solid #e8e5dd;vertical-align:top}th:last-child,td:last-child{text-align:right;white-space:nowrap}
-  .item-title{font-weight:700}.total{display:flex;justify-content:flex-end;margin-top:18px}.total div{width:260px;padding:17px;background:#fffbea;border:1px solid #ffed00;border-radius:8px}
+  .item-title{font-weight:700}.reference-image{margin:22px 0}.reference-image h2,.materials-report h2{font-size:15px;margin:0 0 10px}.reference-image img{display:block;max-width:100%;max-height:360px;object-fit:contain;border:1px solid #e8e5dd;border-radius:8px}.materials-report{margin-top:24px;break-inside:avoid}.materials-report table{margin-top:8px}.materials-report th:last-child,.materials-report td:last-child{text-align:left;white-space:normal}.total{display:flex;justify-content:flex-end;margin-top:18px}.total div{width:260px;padding:17px;background:#fffbea;border:1px solid #ffed00;border-radius:8px}
   .total span{display:block;color:#5c5c5c;font-size:11px}.total strong{display:block;margin-top:6px;color:#E30613;font-size:25px}
   .thanks{margin-top:48px;padding-top:17px;border-top:1px solid #e8e5dd;text-align:center;color:#5c5c5c;font-size:12px}
   .toolbar{max-width:760px;margin:0 auto 22px;display:flex;justify-content:flex-end;gap:8px}
@@ -312,6 +322,8 @@ function openQuote(job) {
   <h1>Cotización</h1><p class="muted">Propuesta económica para el trabajo solicitado.</p>
   <section class="meta"><div class="box"><small>Cliente</small><strong>${escapeText(data.cliente || 'Cliente')}</strong></div><div class="box"><small>Trabajo</small><strong>${escapeText(data.nombre)}</strong></div></section>
   ${data.descripcion ? `<p class="description">${escapeText(data.descripcion)}</p>` : ''}
+  ${data.imagenReferencia ? `<section class="reference-image"><h2>Imagen de referencia</h2><img src="${escapeText(data.imagenReferencia)}" alt="Imagen de referencia del trabajo"></section>` : ''}
+  ${materialsReport}
   <table><thead><tr><th>Detalle</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th></tr></thead>
   <tbody><tr><td><div class="item-title">${escapeText(data.nombre)}</div>${data.descripcion ? `<div class="muted" style="margin-top:5px">${escapeText(data.descripcion)}</div>` : ''}</td><td>${quantity}</td><td>${money(unitPrice)}</td><td>${money(calc.precioVenta)}</td></tr></tbody></table>
   <div class="total"><div><span>TOTAL DE LA COTIZACIÓN</span><strong>${money(calc.precioVenta)}</strong></div></div>
@@ -337,6 +349,7 @@ export function renderJobsView(container) {
             <label class="job-field"><span>Cliente / solicitado por</span><input name="cliente" placeholder="Nombre del cliente"></label>
             <label class="job-field"><span>Fecha del trabajo</span><input name="fecha" type="date"></label>
             <label class="job-field job-span-2"><span>Descripción / notas</span><textarea name="descripcion" rows="2" placeholder="Color, acabado, referencias…"></textarea></label>
+          <div class="job-field job-span-2 quote-reference-upload"><span>Imagen de referencia (opcional)</span><label class="quote-reference-drop" id="quoteReferenceDrop"><input type="file" id="quoteReferenceFile" accept="image/*" hidden><strong>Pega una imagen con Ctrl + V o haz clic para seleccionarla</strong><small>Se adjuntará al reporte PDF de cotización.</small></label><div class="quote-reference-preview" id="quoteReferencePreview" hidden></div></div>
           </div>
           <div class="jobs-subheading">Tipo de registro</div>
           <div class="jobs-form-grid">
@@ -396,6 +409,8 @@ export function renderJobsView(container) {
   `;
 
   const form = container.querySelector('#jobForm');
+  let quoteReferenceFile = null;
+  let quoteReferenceUrl = '';
   const preview = container.querySelector('#jobPreview');
   const history = container.querySelector('#jobHistory');
   const stats = container.querySelector('#jobsStats');
@@ -501,11 +516,30 @@ export function renderJobsView(container) {
     form.elements.fallas.value = String(settings.fallas ?? 10);
     form.elements.margen.value = String(settings.margen ?? 40);
     form.elements.precioKg.value = String(settings.precioFilamentoKg ?? 95);
+    quoteReferenceFile = null; quoteReferenceUrl = '';
+    const referencePreview = container.querySelector('#quoteReferencePreview');
+    referencePreview.hidden = true; referencePreview.innerHTML = '';
+    container.querySelector('#quoteReferenceFile').value = '';
     container.querySelector('#jobFormTitle').textContent = 'Nuevo trabajo o cotización';
     container.querySelector('#jobSaveButton').textContent = 'Guardar registro';
     refresh();
   }
 
+  const referenceInput = container.querySelector('#quoteReferenceFile');
+  const referenceDrop = container.querySelector('#quoteReferenceDrop');
+  const referencePreview = container.querySelector('#quoteReferencePreview');
+  function showReference(file, existingUrl = '') {
+    if (file && !file.type.startsWith('image/')) { window.alert('Selecciona una imagen válida.'); return; }
+    quoteReferenceFile = file || null;
+    quoteReferenceUrl = existingUrl;
+    const url = file ? URL.createObjectURL(file) : existingUrl;
+    referencePreview.hidden = !url;
+    referencePreview.innerHTML = url ? `<img src="${url}" alt="Vista previa de referencia"><button type="button" class="job-action danger" id="removeQuoteReference">Quitar imagen</button>` : '';
+    referencePreview.querySelector('#removeQuoteReference')?.addEventListener('click', () => { quoteReferenceFile = null; quoteReferenceUrl = ''; referenceInput.value = ''; referencePreview.hidden = true; referencePreview.innerHTML = ''; });
+  }
+  referenceInput.addEventListener('change', () => { const file = referenceInput.files?.[0]; if (file) showReference(file); });
+  referenceDrop.addEventListener('click', event => { if (event.target.closest('input')) return; referenceInput.click(); });
+  form.addEventListener('paste', event => { const imageItem = [...(event.clipboardData?.items || [])].find(item => item.type.startsWith('image/')); if (!imageItem) return; const file = imageItem.getAsFile(); if (file) { event.preventDefault(); showReference(file); } });
   form.addEventListener('input', refresh);
   filamentRoot.addEventListener('change', event => {
     if (event.target.matches('[data-filament-material]')) syncFilamentColor(event.target.closest('[data-filament-row]'));
@@ -551,6 +585,7 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const previousJob = editingId ? jobs.find(job => job.id === editingId) : null;
+    data.imagenReferencia = quoteReferenceFile ? await uploadProductImage(quoteReferenceFile, 'cotizacion-' + jobId) : (quoteReferenceUrl || previousJob?.data?.imagenReferencia || '');
     data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase());
     try {
       if (data.estadoTrabajo === 'realizado') {
@@ -639,6 +674,7 @@ export function renderJobsView(container) {
       // La copia es una cotización independiente: nunca reutiliza el ID ni modifica el trabajo original.
       editingId = null;
       form.reset();
+      showReference(null, source.data.imagenReferencia || '');
       Object.entries(source.data || {}).forEach(([key, value]) => {
         if (key === 'materiales' || key === 'clientId' || !form.elements[key]) return;
         form.elements[key].value = key === 'fecha' ? dateInput(Date.now()) : value ?? '';
@@ -660,6 +696,7 @@ export function renderJobsView(container) {
       const job = jobs.find(item => item.id === editButton.dataset.edit);
       if (!job) return;
       editingId = job.id;
+      showReference(null, job.data.imagenReferencia || '');
       Object.entries(job.data).forEach(([key, value]) => {
         if (form.elements[key]) {
           if (key === 'materiales') return;
