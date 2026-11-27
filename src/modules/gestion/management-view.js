@@ -455,11 +455,11 @@ function renderProductsTable(root, filters = {}) {
       const x=getProductVariantStock(p.id,v.id,appState.jobs,appState.sales,appState.consignments),src=barcodeImageSource(v.codigo);
       return `<div class="catalog-dashboard-variant"><span class="catalog-variant-info"><b>${esc(v.nombre)}</b><small>${esc(v.codigo)} · ${x.available} disponibles</small><img class="catalog-inline-barcode variant-barcode" src="${esc(src)}" alt="Código de barras ${esc(v.codigo)}" title="Código vectorial con número legible debajo" loading="lazy"></span><span class="catalog-barcode-actions"><button type="button" class="management-link" data-download-barcode="${esc(v.codigo)}">SVG vectorial</button><button class="management-link" data-variant-barcode="${esc(p.id)}" data-variant-id="${esc(v.id)}">Etiqueta</button></span></div>`;
     }).join('');
-    const image=p.imageUrl?`<img class="catalog-dashboard-image" src="${esc(p.imageUrl)}" alt="Vista previa de ${esc(p.nombre)}" loading="lazy">`:'<div class="catalog-dashboard-image catalog-dashboard-image-empty"><span>＋</span><small>Añadir imagen</small></div>';
-    return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top catalog-dashboard-hero"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div></div>
+    const image=p.imageUrl?`<img class="catalog-dashboard-image" data-product-image-preview="${esc(p.id)}" src="${esc(p.imageUrl)}" alt="Vista previa de ${esc(p.nombre)}" title="Clic para ampliar" loading="lazy">`:'<div class="catalog-dashboard-image catalog-dashboard-image-empty"><span>＋</span><small>Añadir imagen</small></div>';
+    return `<article class="catalog-dashboard-card"><div class="catalog-dashboard-top catalog-dashboard-hero"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div><div class="catalog-dashboard-overlay-content">
     <div class="catalog-dashboard-barcode-panel"><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Código de barras ${esc(p.codigo)}"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
-    <div class="catalog-dashboard-actions"><button class="management-button ${publishedJobs>0?'catalog-published':''}" data-product-toggle-catalog="${esc(p.id)}">${publishButtonLabel}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div>
+    <div class="catalog-dashboard-actions"><button class="management-button ${publishedJobs>0?'catalog-published':''}" data-product-toggle-catalog="${esc(p.id)}">${publishButtonLabel}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div></div></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
     ${jobRows?`<details class="catalog-dashboard-details"><summary>Trabajos asociados (${linked.length})</summary><div class="catalog-dashboard-jobs">${jobRows}</div></details>`:'<p class="catalog-dashboard-no-jobs">Todavía no hay trabajos asociados.</p>'}</article>`;
   }).join('');
@@ -778,6 +778,20 @@ function attachProducts(root) {
   ['#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter'].forEach(selector=>root.querySelector(selector).addEventListener('change',refresh));
   root.querySelector('#catalog-clear-filters').addEventListener('click',()=>{['#product-search','#catalog-date-from','#catalog-date-to','#catalog-type-filter','#catalog-status-filter','#catalog-client-filter'].forEach(selector=>root.querySelector(selector).value='');refresh();});
   root.querySelector('#products-table').addEventListener('click',async e=>{
+    const imagePreview=e.target.closest('[data-product-image-preview]');
+    if(imagePreview){
+      const product=getProduct(imagePreview.dataset.productImagePreview);
+      if(product?.imageUrl){
+        const dialog=document.createElement('dialog');
+        dialog.className='catalog-product-image-dialog';
+        dialog.innerHTML=`<button type="button" class="catalog-product-image-close" aria-label="Cerrar">×</button><img src="${esc(product.imageUrl)}" alt="Imagen principal de ${esc(product.nombre)}"><span>${esc(product.nombre)}</span>`;
+        dialog.querySelector('button').addEventListener('click',()=>dialog.close());
+        dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+        dialog.addEventListener('close',()=>dialog.remove());
+        document.body.append(dialog);dialog.showModal();
+      }
+      return;
+    }
     const catalogToggle=e.target.closest('[data-product-toggle-catalog]');
     if(catalogToggle){
       const product=getProduct(catalogToggle.dataset.productToggleCatalog);
