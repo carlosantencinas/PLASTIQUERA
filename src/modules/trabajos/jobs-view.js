@@ -97,6 +97,7 @@ function readForm(form) {
     piezasFallidas,
     piezasVendibles: Math.max(piezas - piezasFallidas, 0),
     imagenReferencia: '',
+    reservaFilamentoPct: 20,
     margen: number(fd.get('margen')),
   };
 }
@@ -119,7 +120,8 @@ function parseSlicerGcode(content) {
 
 function renderPreview(data, calc) {
   const segments = [
-    ['Material', calc.costoMaterial, '#ff783f'],
+    ['Filamento', calc.costoMaterial, '#ff783f'],
+    ['Reserva para recompra de filamento (20%)', calc.reservaReposicionFilamento, '#f0a13a'],
     ['Energía', calc.costoEnergia, '#e8b83f'],
     ['Mantenimiento', calc.costoMantenimiento, '#8b93a0'],
     ['Mano de obra', calc.costoManoObra, '#c9a9e0'],
@@ -585,6 +587,8 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const previousJob = editingId ? jobs.find(job => job.id === editingId) : null;
+    // No alterar cotizaciones antiguas al editarlas: la reserva aplica a los trabajos nuevos.
+    if (previousJob) data.reservaFilamentoPct = Number(previousJob.data.reservaFilamentoPct) || 0;
     data.imagenReferencia = quoteReferenceFile ? await uploadProductImage(quoteReferenceFile, 'cotizacion-' + jobId) : (quoteReferenceUrl || previousJob?.data?.imagenReferencia || '');
     data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase());
     try {
