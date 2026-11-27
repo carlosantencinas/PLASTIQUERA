@@ -15,8 +15,11 @@ export function calculateJob(data) {
   const costoMantenimiento = data.horasImpresion * data.mantenimiento;
   const costoManoObra = data.horasTrabajo * data.tarifaHora;
   const costoOtros = data.otros;
+  // Reserva fija para recomprar filamento: solo se aplica a trabajos nuevos que guardan el porcentaje.
+  const reservaReposicionFilamento = costoMaterial * (Number(data.reservaFilamentoPct) || 0) / 100;
   const subtotal =
     costoMaterial +
+    reservaReposicionFilamento +
     costoEnergia +
     costoMantenimiento +
     costoManoObra +
@@ -36,6 +39,7 @@ export function calculateJob(data) {
     costoMantenimiento,
     costoManoObra,
     costoOtros,
+    reservaReposicionFilamento,
     costoFallas,
     costoTotal,
     ganancia,
