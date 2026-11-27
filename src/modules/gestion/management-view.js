@@ -247,7 +247,7 @@ function sales() {
       <label class="management-field">Vendido por<input name="vendidoPor"></label><label class="management-field">Notas<textarea name="notas" rows="2"></textarea></label>
       <button class="management-button" type="submit">Guardar venta</button><p class="management-help" id="sale-stock-help">Al asociar un trabajo se validan las piezas restantes y se descuenta la cantidad vendida del stock disponible.</p>
     </form>
-    <div class="management-card sales-history-card"><h3>Historial de ventas</h3><div id="sales-summary" class="sales-summary"></div><div class="management-table-wrap" id="sales-table"></div><div class="management-actions"><button class="management-button secondary" id="sales-print">Imprimir reporte</button><button class="management-button secondary" id="sales-csv">Exportar CSV</button></div></div>
+    <div class="management-card sales-history-card"><h3>Historial de ventas</h3><div id="sales-summary" class="sales-summary"></div><div id="sales-profitability" class="sales-profitability"></div><div class="management-table-wrap" id="sales-table"></div><div class="management-actions"><button class="management-button secondary" id="sales-print">Imprimir reporte</button><button class="management-button secondary" id="sales-csv">Exportar CSV</button></div></div>
   </div>`;
 }
 
@@ -480,13 +480,76 @@ function renderClientsTable(root, query='') {
   if(!rows.length){root.innerHTML='<p class="management-empty">No hay clientes o tiendas que coincidan.</p>';return;}
   root.innerHTML=`<table class="management-table"><thead><tr><th>Tipo</th><th>Nombre</th><th>Teléfono</th><th>Contacto</th><th>Dirección</th><th></th></tr></thead><tbody>${rows.map(c=>`<tr><td>${esc(c.tipo)}</td><td><b>${esc(c.nombre)}</b><small>${esc(c.notas)}</small></td><td>${esc(c.telefono)}</td><td>${esc(c.contacto)}</td><td>${esc(c.direccion)}</td><td><button class="management-link" data-client-history="${esc(c.id)}">Historial</button> <button class="management-link" data-client-edit="${esc(c.id)}">Editar</button> <button class="management-link danger" data-client-delete="${esc(c.id)}">Eliminar</button></td></tr>`).join('')}</tbody></table>`;
 }
+function getSaleQuoteBreakdown(sale) {
+  if (sale?.cotizacionUnitSnapshot && typeof sale.cotizacionUnitSnapshot === 'object') {
+    return { values: sale.cotizacionUnitSnapshot, hasQuote: true, source: 'snapshot' };
+  }
+  let candidates = sale?.jobId
+    ? appState.jobs.filter(job => job.id === sale.jobId)
+    : appState.jobs.filter(job => job.data?.productoId === sale?.productoId);
+  if (sale?.variantId) {
+    const matching = candidates.filter(job =>
+      job.data?.variantId === sale.variantId ||
+      (Array.isArray(job.data?.productionBatches) && job.data.productionBatches.some(batch => batch.variantId === sale.variantId))
+    );
+    if (matching.length) candidates = matching;
+  }
+  const fields = ['costoMaterial','costoEnergia','costoMantenimiento','costoManoObra','costoOtros','costoFallas','ganancia'];
+  const totals = Object.fromEntries(fields.map(key => [key, 0]));
+  let weight = 0;
+  candidates.forEach(job => {
+    const quantity = Math.max(0, Number(pieces(job)) || 0);
+    if (!quantity || !job.calc) return;
+    fields.forEach(key => { totals[key] += Number(job.calc[key] || 0) / quantity * quantity; });
+    weight += quantity;
+  });
+  if (!weight) return { values: totals, hasQuote: false, source: 'missing' };
+  fields.forEach(key => { totals[key] /= weight; });
+  return { values: totals, hasQuote: true, source: 'estimated' };
+}
+
+function saleFinancials(sale) {
+  const qty = Math.max(0, Number(sale.cantidad || 1));
+  const quote = getSaleQuoteBreakdown(sale);
+  const values = Object.fromEntries(Object.entries(quote.values).map(([key,value]) => [key, Number(value || 0) * qty]));
+  const costs = ['costoMaterial','costoEnergia','costoMantenimiento','costoManoObra','costoOtros','costoFallas']
+    .reduce((sum,key) => sum + values[key], 0);
+  const quotedGain = values.ganancia || 0;
+  const quotedTotal = costs + quotedGain;
+  const revenue = Number(sale.monto || 0);
+  const discount = quote.hasQuote ? Math.max(0, quotedTotal - revenue) : 0;
+  return { ...values, costs, quotedGain, quotedTotal, revenue, discount, netGain: quote.hasQuote ? revenue - costs : null, hasQuote: quote.hasQuote, source: quote.source, quantity: qty };
+}
+
 function renderSalesTable(root) {
   const sales=[...appState.sales].sort((a,b)=>Number(b.fecha||b.createdAt||0)-Number(a.fecha||a.createdAt||0));
   const total=sales.reduce((sum,sale)=>sum+Number(sale.monto||0),0);
   const units=sales.reduce((sum,sale)=>sum+Number(sale.cantidad||1),0);
   const average=sales.length?total/sales.length:0;
   const summary=root.parentElement.querySelector('#sales-summary');
-  if(summary)summary.innerHTML=`<div><span>OPERACIONES</span><b>${sales.length}</b></div><div><span>UNIDADES VENDIDAS</span><b>${units}</b></div><div><span>INGRESOS REGISTRADOS</span><b>${money(total)}</b></div><div><span>VENTA PROMEDIO</span><b>${money(average)}</b></div>`;
+  const productTotals=new Map();
+  const overall={units:0,revenue:0,costoMaterial:0,costoEnergia:0,costoMantenimiento:0,costoManoObra:0,costoOtros:0,costoFallas:0,quotedGain:0,discount:0,netGain:0,knownUnits:0,unknownUnits:0};
+  sales.forEach(sale=>{
+    const fin=saleFinancials(sale);
+    const key=sale.productoId||sale.productoNombre||'sin-producto';
+    const row=productTotals.get(key)||{name:sale.productoNombre||'Producto sin nombre',...Object.fromEntries(['units','revenue','costoMaterial','costoEnergia','costoMantenimiento','costoManoObra','costoOtros','costoFallas','quotedGain','discount','netGain','knownUnits','unknownUnits'].map(k=>[k,0]))};
+    ['units','revenue','costoMaterial','costoEnergia','costoMantenimiento','costoManoObra','costoOtros','costoFallas','quotedGain','discount'].forEach(k=>row[k]+=k==='units'?fin.quantity:k==='revenue'?fin.revenue:fin[k]||0);
+    if(fin.hasQuote){row.netGain+=fin.netGain;row.knownUnits+=fin.quantity;overall.netGain+=fin.netGain;overall.knownUnits+=fin.quantity;}
+    else {row.unknownUnits+=fin.quantity;overall.unknownUnits+=fin.quantity;}
+    productTotals.set(key,row);
+    overall.units+=fin.quantity;overall.revenue+=fin.revenue;
+    ['costoMaterial','costoEnergia','costoMantenimiento','costoManoObra','costoOtros','costoFallas','quotedGain','discount'].forEach(k=>overall[k]+=fin[k]||0);
+  });
+  if(summary)summary.innerHTML=`<div><span>OPERACIONES</span><b>${sales.length}</b></div><div><span>UNIDADES VENDIDAS</span><b>${units}</b></div><div><span>INGRESOS REGISTRADOS</span><b>${money(total)}</b></div><div><span>GANANCIA NETA CALCULADA</span><b>${money(overall.netGain)}</b></div>`;
+  const breakdown=root.parentElement.querySelector('#sales-profitability');
+  if(breakdown){
+    const labels=[['costoMaterial','Material'],['costoEnergia','Energía'],['costoMantenimiento','Mantenimiento'],['costoManoObra','Mano de obra'],['costoOtros','Otros costos'],['costoFallas','Colchón por fallas']];
+    breakdown.innerHTML=`<div class="sales-profitability-heading"><div><h4>Rentabilidad por producto vendido</h4><p>Los costos se mantienen íntegros. Los descuentos se descuentan únicamente de la ganancia.</p></div></div>
+      <div class="management-table-wrap"><table class="management-table sales-profitability-table"><thead><tr><th>Producto</th><th>Unid.</th><th>Ingresos</th>${labels.map(([,label])=>'<th>'+label+'</th>').join('')}<th>Ganancia cotizada</th><th>Descuento</th><th>Ganancia neta</th></tr></thead><tbody>
+      ${[...productTotals.values()].map(row=>`<tr><td><b>${esc(row.name)}</b>${row.unknownUnits?'<small>'+row.unknownUnits+' unidad(es) sin cotización vinculada</small>':''}</td><td>${row.units}</td><td>${money(row.revenue)}</td>${labels.map(([key])=>'<td>'+money(row[key])+'</td>').join('')}<td>${money(row.quotedGain)}</td><td>${money(row.discount)}</td><td>${row.knownUnits?money(row.netGain):'—'}</td></tr>`).join('')}
+      </tbody><tfoot><tr><th>TOTAL</th><th>${overall.units}</th><th>${money(overall.revenue)}</th>${labels.map(([key])=>'<th>'+money(overall[key])+'</th>').join('')}<th>${money(overall.quotedGain)}</th><th>${money(overall.discount)}</th><th>${overall.knownUnits?money(overall.netGain):'—'}</th></tr></tfoot></table></div>
+      <p class="management-help">La ganancia neta se calcula como ingreso real menos costos cotizados. ${overall.unknownUnits?overall.unknownUnits+' unidad(es) vendidas no tienen una cotización asociada y no se incluyen en la ganancia calculada.':'Todas las ventas tienen un desglose de costos disponible.'} ${sales.some(s=>saleFinancials(s).source==='estimated')?'En ventas anteriores sin desglose guardado se usa un promedio ponderado de las cotizaciones del producto.':''}</p>`;
+  }
   if(!sales.length){root.innerHTML='<p class="management-empty">Todavía no hay ventas registradas.</p>';return;}
   root.innerHTML=`<table class="management-table sales-detail-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Trabajo</th><th>Cantidad</th><th>Precio unitario</th><th>Total</th><th>Pago</th><th>Vendido por</th><th>Notas</th><th></th></tr></thead><tbody>${sales.map(s=>{
     const qty=Number(s.cantidad||1), unit=qty?Number(s.monto||0)/qty:0;
@@ -1067,7 +1130,8 @@ function attachSales(root) {
       try{if(variantId)assertVariantCanMove(product.id,variantId,qty,appState.jobs,appState.sales,appState.consignments);else assertProductCanMove(product.id,qty,appState.jobs,appState.sales,appState.consignments);}catch(error){alert(error.message);return;}
     }
     const linkedClient=findClientByName(d.cliente);
-    const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
+    const quote=getSaleQuoteBreakdown({productoId:d.productoId,variantId,jobId:null});
+    const sale={id:makeId('venta'),clientId:linkedClient?.id||null,jobId:d.jobId||null,jobNombre:job?.data.nombre||'',productoId:d.productoId||null,variantId:variantId||job?.data?.variantId||null,productoNombre:product?.nombre||'',cliente:d.cliente.trim(),cantidad:qty,monto:amount,cotizacionUnitSnapshot:quote.hasQuote?quote.values:null,fecha:d.fecha?new Date(d.fecha+'T12:00:00').getTime():Date.now(),metodoPago:d.metodoPago,vendidoPor:d.vendidoPor.trim(),notas:d.notas.trim(),createdAt:Date.now()};
     appState.sales.push(sale);
     try{
       const persisted=await saveAppState();
