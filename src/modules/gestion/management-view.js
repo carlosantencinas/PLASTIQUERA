@@ -238,8 +238,8 @@ function clients() {
 function sales() {
   return `<div class="management-grid">
     <form class="management-card" id="sale-form"><h3>Registrar venta</h3>
-      <label class="management-field">Trabajo asociado<select name="jobId" id="sale-job"><option value="">Venta independiente / sin trabajo</option>${appState.jobs.map(j=>`<option value="${esc(j.id)}">${esc(j.data.nombre)} — ${money(j.calc?.precioUnitario || j.calc?.precioVenta)}</option>`).join('')}</select></label>
-      <label class="management-field">Producto (opcional)<select name="productoId" id="sale-product"><option value="">Sin producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${pendingSaleProductId===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
+      <label class="management-field">Producto<select name="productoId" id="sale-product" required><option value="">Selecciona un producto</option>${appState.products.map(p=>`<option value="${esc(p.id)}" ${pendingSaleProductId===p.id?'selected':''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('')}</select></label>
+      <div id="sale-product-preview" class="sale-product-preview" hidden></div>
       <label class="management-field">Variante<select name="variantId" id="sale-variant"><option value="">Selecciona producto primero</option></select></label>
       <label class="management-field">Cliente<input name="cliente" list="management-clients" placeholder="Nombre del cliente"><datalist id="management-clients">${appState.clients.map(c=>`<option value="${esc(c.nombre)}"></option>`).join('')}</datalist></label>
       <div class="management-form-row"><label class="management-field">Cantidad<input name="cantidad" type="number" min="1" step="1" value="1" required></label><label class="management-field">Monto (Bs)<input name="monto" type="number" min="0.01" step="0.01" required></label></div>
@@ -1026,25 +1026,33 @@ function attachClients(root) {
   });
 }
 function attachSales(root) {
-  const form=root.querySelector('#sale-form'), jobSel=form.elements.jobId, prodSel=form.elements.productoId, variantSel=form.elements.variantId;
-  const refreshSaleVariants=()=>{const p=getProduct(prodSel.value);const variants=getProductVariants(p);variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');variantSel.required=variants.length>0;};
-  prodSel.addEventListener('change',refreshSaleVariants);refreshSaleVariants();
-  function updatePrice(){
-    const job=getJob(jobSel.value);if(!job)return;
-    const amount=Number(job.calc?.precioUnitario||job.calc?.precioVenta||0);
-    if(!form.elements.monto.value)form.elements.monto.value=(amount*Number(form.elements.cantidad.value||1)).toFixed(2);
-    root.querySelector('#sale-stock-help').textContent=`Piezas vendibles del trabajo: ${pieces(job)}. Ventas ya registradas: ${appState.sales.filter(s=>s.jobId===job.id).reduce((n,s)=>n+Number(s.cantidad||1),0)}.`;
-  }
-  jobSel.addEventListener('change',updatePrice);form.elements.cantidad.addEventListener('input',updatePrice);
+  const form=root.querySelector('#sale-form'), prodSel=form.elements.productoId, variantSel=form.elements.variantId;
+  const preview=root.querySelector('#sale-product-preview');
+  const refreshSaleProduct=()=>{
+    const product=getProduct(prodSel.value);
+    const variants=getProductVariants(product);
+    variantSel.innerHTML='<option value="">'+(variants.length?'Selecciona variante':'Sin variante')+'</option>'+variants.map(v=>'<option value="'+esc(v.id)+'">'+esc(v.nombre)+' · '+esc(v.codigo)+'</option>').join('');
+    variantSel.required=variants.length>0;
+    if(product){
+      preview.hidden=false;
+      preview.innerHTML=(product.imageUrl?'<img src="'+esc(product.imageUrl)+'" alt="'+esc(product.nombre)+'">':'<div class="sale-product-no-image">Sin fotografía</div>')+'<div><b>'+esc(product.nombre)+'</b><small>'+esc(product.codigo)+'</small><span>'+stockFor(product.id).available+' unidades disponibles</span></div>';
+      const latestJob=jobIdsFor(product.id).sort((a,b)=>Number(b.updatedAt||b.createdAt||b.data?.fecha||0)-Number(a.updatedAt||a.createdAt||a.data?.fecha||0))[0];
+      const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;
+      if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);
+      root.querySelector('#sale-stock-help').textContent='Stock disponible: '+stockFor(product.id).available+' unidades. La venta descontará automáticamente la cantidad registrada.';
+    }else{
+      preview.hidden=true;preview.innerHTML='';
+      root.querySelector('#sale-stock-help').textContent='Selecciona un producto para consultar su fotografía, variantes y existencias disponibles.';
+    }
+  };
+  prodSel.addEventListener('change',refreshSaleProduct);
+  refreshSaleProduct();
   form.addEventListener('submit',async e=>{
     e.preventDefault();const d=Object.fromEntries(new FormData(form));const qty=Math.floor(Number(d.cantidad)), amount=Number(d.monto);
     if(!Number.isInteger(qty)||qty<1||!Number.isFinite(amount)||amount<=0){alert('Cantidad o monto no válido.');return;}
-    const job=getJob(d.jobId);
+    const job=null;
     const product=getProduct(d.productoId);
-    if(job){
-      try{assertJobCanSell(job,qty,appState.sales);}catch(error){alert(error.message);return;}
-      if(!product||job.data.productoId!==product.id){alert('El trabajo seleccionado debe estar asignado al producto elegido.');return;}
-    }
+    if(!product){alert('Selecciona un producto para registrar la venta.');return;}
     const variantId=String(d.variantId||'');
     if(product&&getProductVariants(product).length&&!variantId){alert('Selecciona la variante para registrar la venta.');return;}
     if(product&&variantId&&!getProductVariants(product).some(v=>v.id===variantId)){alert('La variante seleccionada no pertenece al producto.');return;}
@@ -1071,16 +1079,7 @@ function attachSales(root) {
       alert('No se pudo guardar la venta: '+error.message);
     }
   });
-  if(pendingSaleJobId && jobSel.querySelector('option[value="'+pendingSaleJobId+'"]')){
-    const job=getJob(pendingSaleJobId);
-    jobSel.value=pendingSaleJobId;
-    if(job?.data?.productoId && prodSel.querySelector('option[value="'+job.data.productoId+'"]')){prodSel.value=job.data.productoId;refreshSaleVariants();if(job.data.variantId)variantSel.value=job.data.variantId;}
-    const unit=Number(job?.calc?.precioUnitario||job?.calc?.precioVenta||0);
-    if(unit>0)form.elements.monto.value=unit.toFixed(2);
-    updatePrice();
-    root.querySelector('#sale-stock-help').textContent=`Venta de ${job?.data?.nombre||'trabajo'} · ${pieces(job)} piezas vendibles.`;
-    pendingSaleJobId=null;
-  } else if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;const product=getProduct(pendingSaleProductId);const stock=stockFor(pendingSaleProductId);const latestJob=jobIdsFor(pendingSaleProductId).sort((a,b)=>Number(b.createdAt||b.data?.fecha||0)-Number(a.createdAt||a.data?.fecha||0))[0];const unit=latestJob?Number(latestJob.calc?.precioUnitario||latestJob.calc?.precioVenta||0):0;if(unit>0&&!form.elements.monto.value)form.elements.monto.value=unit.toFixed(2);root.querySelector('#sale-stock-help').textContent='Venta de '+product.nombre+' · '+stock.available+' unidades disponibles. Ajusta el monto según la cantidad y el precio acordado.';}
+  if(pendingSaleProductId && prodSel.querySelector('option[value="'+pendingSaleProductId+'"]')){prodSel.value=pendingSaleProductId;refreshSaleProduct();}
   root.querySelector('#sales-table').addEventListener('click',e=>{
     const del=e.target.closest('[data-sale-delete]');if(!del)return;
     if(!confirm('¿Eliminar esta venta? Las piezas volverán a estar disponibles.'))return;
