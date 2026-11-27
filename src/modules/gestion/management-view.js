@@ -459,7 +459,7 @@ function renderProductsTable(root, filters = {}) {
     return `<article class="catalog-dashboard-card catalog-dashboard-vertical-card"><div class="catalog-dashboard-product-layout"><div class="catalog-dashboard-image-wrap">${image}</div><div class="catalog-dashboard-product-info"><div class="catalog-dashboard-identity"><span class="catalog-row-kind">${esc(PRODUCT_TYPES.find(x=>x[0]===p.tipo)?.[1]||p.tipo||'PRODUCTO')}</span><h3>${esc(p.nombre)}</h3><code>${esc(p.codigo)}</code>${p.notas?`<p>${esc(p.notas)}</p>`:''}</div><div class="catalog-dashboard-stock"><b>${st.available}</b><span>Disponibles</span></div>
     <div class="catalog-dashboard-barcode-panel"><img class="catalog-inline-barcode product-barcode" src="${esc(productBarcode)}" alt="Código de barras ${esc(p.codigo)}" title="Código de barras ${esc(p.codigo)}"></div>
     <div class="catalog-dashboard-kpis"><div><small>Producidas</small><b>${st.produced}</b></div><div><small>Vendidas</small><b>${st.sold}</b></div><div><small>Variantes</small><b>${vs.length}</b></div><div><small>Trabajos</small><b>${linked.length}</b></div></div>
-    <div class="catalog-dashboard-actions"><button class="management-button ${publishedJobs>0?'catalog-published':''}" data-product-toggle-catalog="${esc(p.id)}">${publishButtonLabel}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div></div></div>
+    <div class="catalog-dashboard-actions"><button type="button" class="management-button product-quick-sale" data-sell-product="${esc(p.id)}">Vender</button><button class="management-button ${publishedJobs>0?'catalog-published':''}" data-product-toggle-catalog="${esc(p.id)}">${publishButtonLabel}</button><button class="management-link" data-product-barcode="${esc(p.id)}">Etiqueta</button><button class="management-link" data-product-edit="${esc(p.id)}">Editar</button><button class="management-link" data-variant-add="${esc(p.id)}">+ Variante</button><button class="management-link danger" data-product-delete="${esc(p.id)}">Eliminar</button></div></div></div>
     <details class="catalog-dashboard-details"><summary>Variantes y códigos (${vs.length})</summary><div class="catalog-dashboard-variants">${variantRows||'<p class="management-empty">Todavía no hay variantes.</p>'}</div></details>
     ${jobRows?`<details class="catalog-dashboard-details"><summary>Trabajos asociados (${linked.length})</summary><div class="catalog-dashboard-jobs">${jobRows}</div></details>`:'<p class="catalog-dashboard-no-jobs">Todavía no hay trabajos asociados.</p>'}</article>`;
   }).join('');
@@ -792,6 +792,8 @@ function attachProducts(root) {
       }
       return;
     }
+    const quickSale=e.target.closest('[data-sell-product]');
+    if(quickSale){pendingSaleProductId=quickSale.dataset.sellProduct;pendingSaleJobId=null;renderManagementView(root,'sales');return;}
     const catalogToggle=e.target.closest('[data-product-toggle-catalog]');
     if(catalogToggle){
       const product=getProduct(catalogToggle.dataset.productToggleCatalog);
