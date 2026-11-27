@@ -1759,3 +1759,13 @@ body { background: #f5f5f2; }
  .catalog-dashboard-vertical-card .catalog-dashboard-actions .management-button,.catalog-dashboard-vertical-card .catalog-dashboard-actions .management-link{min-height:29px;padding:5px 6px;font-size:9px}
  .catalog-dashboard-vertical-card .catalog-dashboard-barcode-panel .product-barcode{max-height:40px}
 }
+
+/* Vista previa del producto en el formulario de ventas */
+.sale-product-preview{display:flex;align-items:center;gap:14px;margin:10px 0 16px;padding:12px;border:1px solid var(--border-color,#e5e7eb);border-radius:12px;background:var(--surface-soft,#f8fafc)}
+.sale-product-preview[hidden]{display:none}
+.sale-product-preview img,.sale-product-no-image{width:104px;height:104px;flex:0 0 104px;object-fit:cover;border-radius:9px;background:#f1f5f9}
+.sale-product-no-image{display:grid;place-items:center;color:#64748b;font-size:.8rem;text-align:center}
+.sale-product-preview>div:last-child{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sale-product-preview b{font-size:1rem}
+.sale-product-preview small,.sale-product-preview span{color:var(--muted,#64748b);font-size:.85rem}
+@media(max-width:560px){.sale-product-preview img,.sale-product-no-image{width:84px;height:84px;flex-basis:84px}}
