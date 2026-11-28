@@ -97,6 +97,7 @@ function readForm(form) {
     piezasFallidas,
     piezasVendibles: Math.max(piezas - piezasFallidas, 0),
     imagenReferencia: '',
+    reservaFilamentoPct: 20,
     margen: number(fd.get('margen')),
   };
 }
@@ -119,7 +120,8 @@ function parseSlicerGcode(content) {
 
 function renderPreview(data, calc) {
   const segments = [
-    ['Material', calc.costoMaterial, '#ff783f'],
+    ['Filamento', calc.costoMaterial, '#ff783f'],
+    ['Reserva para recompra de filamento (20%)', calc.reservaReposicionFilamento, '#f0a13a'],
     ['Energía', calc.costoEnergia, '#e8b83f'],
     ['Mantenimiento', calc.costoMantenimiento, '#8b93a0'],
     ['Mano de obra', calc.costoManoObra, '#c9a9e0'],
@@ -422,7 +424,7 @@ export function renderJobsView(container) {
   function filamentRowMarkup(row = {}) {
     const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
       .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
-      .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+      .map(item => { const color = /^#[0-9a-f]{6}$/i.test(String(item.colorHex || '')) ? item.colorHex.toUpperCase() : 'Sin color'; return `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${escapeText(color)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`; })];
     const material = inventoryState.materials.find(item => item.id === row.materialId);
     const color = /^#[0-9a-f]{6}$/i.test(String(material?.colorHex || '')) ? material.colorHex : '';
     return `<div class="filament-row" data-filament-row data-extruder="${escapeText(row.extruder || '')}" data-source="${escapeText(row.source || 'manual')}">
@@ -461,7 +463,7 @@ export function renderJobsView(container) {
       const selected = select.value || 'manual';
       const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
         .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
-        .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+        .map(item => { const color = /^#[0-9a-f]{6}$/i.test(String(item.colorHex || '')) ? item.colorHex.toUpperCase() : 'Sin color'; return `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${escapeText(color)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`; })];
       select.innerHTML = options.join('');
       select.value = inventoryState.materials.some(item => item.id === selected && item.categoria === 'Filamento' && item.unidad === 'g') ? selected : 'manual';
       syncFilamentColor(row);
@@ -585,6 +587,8 @@ export function renderJobsView(container) {
     }
     const jobId = editingId || (globalThis.crypto?.randomUUID?.() ?? `job_${Date.now()}_${Math.random().toString(36).slice(2)}`);
     const previousJob = editingId ? jobs.find(job => job.id === editingId) : null;
+    // No alterar cotizaciones antiguas al editarlas: la reserva aplica a los trabajos nuevos.
+    if (previousJob) data.reservaFilamentoPct = Number(previousJob.data.reservaFilamentoPct) || 0;
     data.imagenReferencia = quoteReferenceFile ? await uploadProductImage(quoteReferenceFile, 'cotizacion-' + jobId) : (quoteReferenceUrl || previousJob?.data?.imagenReferencia || '');
     data.codigoCatalogo = previousJob?.data?.codigoCatalogo || ('TR-' + String(jobId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase());
     try {
