@@ -424,7 +424,7 @@ export function renderJobsView(container) {
   function filamentRowMarkup(row = {}) {
     const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
       .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
-      .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+      .map(item => { const color = /^#[0-9a-f]{6}$/i.test(String(item.colorHex || '')) ? item.colorHex.toUpperCase() : 'Sin color'; return `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${escapeText(color)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`; })];
     const material = inventoryState.materials.find(item => item.id === row.materialId);
     const color = /^#[0-9a-f]{6}$/i.test(String(material?.colorHex || '')) ? material.colorHex : '';
     return `<div class="filament-row" data-filament-row data-extruder="${escapeText(row.extruder || '')}" data-source="${escapeText(row.source || 'manual')}">
@@ -463,7 +463,7 @@ export function renderJobsView(container) {
       const selected = select.value || 'manual';
       const options = ['<option value="manual">Costo manual / sin descuento</option>', ...inventoryState.materials
         .filter(item => item.categoria === 'Filamento' && item.unidad === 'g')
-        .map(item => `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`)];
+        .map(item => { const color = /^#[0-9a-f]{6}$/i.test(String(item.colorHex || '')) ? item.colorHex.toUpperCase() : 'Sin color'; return `<option value="${escapeText(item.id)}">${escapeText(item.nombre)} · ${escapeText(color)} · ${Number(item.stock).toLocaleString('es-BO')} g · Bs ${(item.costoPromedio * 1000).toFixed(2)}/kg</option>`; })];
       select.innerHTML = options.join('');
       select.value = inventoryState.materials.some(item => item.id === selected && item.categoria === 'Filamento' && item.unidad === 'g') ? selected : 'manual';
       syncFilamentColor(row);
